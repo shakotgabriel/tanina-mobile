@@ -191,7 +191,7 @@ function ExchangeModal({
 
   const fromBalance = (balances as any[]).find((b) => b.currency === fromCurrency);
   const fromBalanceLabel = fromBalance
-    ? formatCurrency(fromBalance.amountMinor, fromCurrency)
+    ? formatCurrency(fromBalance.availableBalanceMinor ?? 0, fromCurrency)
     : '—';
 
   function handleSwap() {
@@ -393,7 +393,7 @@ export default function WalletScreen() {
           Available Balance
         </Text>
         <Text className="text-white text-4xl font-bold mb-1">
-          {formatCurrency(primaryData?.amountMinor ?? 0, primaryData?.currency ?? 'USD')}
+          {formatCurrency(primaryData?.availableBalanceMinor ?? 0, primaryData?.currency ?? 'USD')}
         </Text>
         <Text className="text-white/50 text-xs">
           {primaryData?.currency ?? 'USD'} Wallet
@@ -402,7 +402,7 @@ export default function WalletScreen() {
           <View className="flex-row items-center gap-1 mt-1">
             <Ionicons name="lock-closed-outline" size={11} color="rgba(255,255,255,0.45)" />
             <Text className="text-white/45 text-xs">
-              On hold: {formatCurrency(primaryData.ledgerBalanceMinor - primaryData.amountMinor, primaryData.currency)}
+              On hold: {formatCurrency(primaryData.ledgerBalanceMinor - primaryData.availableBalanceMinor, primaryData.currency)}
             </Text>
           </View>
         )}
@@ -438,7 +438,7 @@ export default function WalletScreen() {
               <View className="flex-1">
                 <Text className="text-gray-800 text-sm font-semibold">{meta?.name ?? code}</Text>
                 <Text className="text-gray-400 text-xs mt-0.5">
-                  {formatCurrency(pocket?.amountMinor ?? 0, code)}
+                  {formatCurrency(pocket?.availableBalanceMinor ?? 0, code)}
                 </Text>
               </View>
               <Text className="text-[#2F6B2F] text-xs font-bold">{code}</Text>
@@ -482,7 +482,9 @@ export default function WalletScreen() {
                   <Ionicons name="swap-horizontal-outline" size={15} color="#6B7280" />
                 </View>
                 <View className="flex-1">
-                  <Text className="text-gray-800 text-sm font-semibold capitalize">{tx.type}</Text>
+                  <Text className="text-gray-800 text-sm font-semibold capitalize">
+                    {tx.note ?? 'Transfer'}
+                  </Text>
                   <Text className="text-gray-400 text-xs">{tx.currency}</Text>
                 </View>
                 <View className="items-end">

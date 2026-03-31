@@ -9,6 +9,7 @@ export const ENDPOINTS = {
   },
   user: {
     updateProfile: '/user/profile',
+    lookup: '/user/lookup',
   },
   wallet: {
     balances: '/wallet/balances',
