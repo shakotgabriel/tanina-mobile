@@ -1,6 +1,6 @@
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
-import { api } from '@/src/lib/api/services';
+import { api, ChangePasswordPayload, UpdateProfilePayload } from '@/src/lib/api/services';
 
 export const useProfileQuery = () => {
   return useQuery({
@@ -20,5 +20,19 @@ export const useTransactionsQuery = () => {
   return useQuery({
     queryKey: ['transactions'],
     queryFn: api.getTransactions,
+  });
+};
+
+export const useUpdateProfileMutation = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: UpdateProfilePayload) => api.updateProfile(payload),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['profile'] }),
+  });
+};
+
+export const useChangePasswordMutation = () => {
+  return useMutation({
+    mutationFn: (payload: ChangePasswordPayload) => api.changePassword(payload),
   });
 };

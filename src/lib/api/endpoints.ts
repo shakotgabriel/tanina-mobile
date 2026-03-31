@@ -5,6 +5,10 @@ export const ENDPOINTS = {
     verifyEmail: '/auth/verify-email',
     forgotPassword: '/auth/forgot-password',
     me: '/auth/me',
+    changePassword: '/auth/change-password',
+  },
+  user: {
+    updateProfile: '/user/profile',
   },
   wallet: {
     balances: '/wallet/balances',
