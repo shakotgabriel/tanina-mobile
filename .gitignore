@@ -5,6 +5,7 @@ node_modules/
 
 # Expo
 .expo/
+.expo-shared/
 dist/
 web-build/
 expo-env.d.ts
@@ -17,27 +18,75 @@ expo-env.d.ts
 *.p12
 *.key
 *.mobileprovision
+*.keystore
 
 # Metro
 .metro-health-check*
+.cache/
+*.tmp
 
 # debug
 npm-debug.*
 yarn-debug.*
 yarn-error.*
+pnpm-debug.log*
 
 # macOS
 .DS_Store
-*.pem
+.AppleDouble
+.LSOverride
 
 # local env files
+.env
 .env*.local
+.env*.development
+.env*.production
+.env*.test
 
 # typescript
 *.tsbuildinfo
 
-app-example
+# logs
+logs/
+*.log
+*.log.*
+
+# IDEs and editors
+.idea/
+.vscode/
+*.sublime-workspace
+*.sublime-project
+
+# temporary files
+*.swp
+*.swo
+*.tmp
+*.temp
+*.bak
+*.backup
+*.old
+*.orig
+*.save
 
 # generated native folders
 /ios
 /android
+
+# build artifacts
+build/
+*.xcworkspace
+Pods/
+Podfile.lock
+DerivedData/
+xcuserdata/
+*.xcuserstate
+
+# Expo example files
+app-example
+
+# Test coverage reports
+coverage/
+.nyc_output/
+
+# CI/CD
+.ci/
