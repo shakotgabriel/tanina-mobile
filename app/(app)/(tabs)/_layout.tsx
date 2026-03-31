@@ -21,10 +21,24 @@ function Header({ user }: HeaderProps) {
 
   return (
     <View
-      className="flex-row items-center justify-between bg-white border-b border-gray-100 px-5 pb-3 shadow-sm"
-      style={{ paddingTop: Math.max(insets.top, 12) + 4 }}
+      style={{
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        backgroundColor: '#FFFFFF',
+        borderBottomWidth: 1,
+        borderBottomColor: '#F3F4F6',
+        paddingTop: Math.max(insets.top, 12) + 4,
+        paddingBottom: 12,
+        paddingHorizontal: 20,
+        elevation: 2,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.06,
+        shadowRadius: 4,
+      }}
     >
-      {/* Logo — style prop required for reliable RN image sizing */}
+      {/* Logo */}
       <Image
         source={require('../../../assets/images/tani.png')}
         style={{ width: 120, height: 34 }}
@@ -32,13 +46,35 @@ function Header({ user }: HeaderProps) {
       />
 
       {/* User pill badge */}
-      <View className="flex-row items-center gap-2 bg-gray-50 border border-gray-200 rounded-full pl-3 pr-1 py-1">
-        <View className="items-end">
-          <Text className="text-[10px] text-gray-400 font-medium tracking-wide uppercase">Welcome</Text>
-          <Text className="text-[13px] font-semibold text-gray-800 leading-[16px]">{user.name}</Text>
+      <View
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 8,
+          backgroundColor: '#F9FCF9',
+          borderWidth: 1,
+          borderColor: '#D1E8D1',
+          borderRadius: 999,
+          paddingLeft: 12,
+          paddingRight: 4,
+          paddingVertical: 4,
+        }}
+      >
+        <View style={{ alignItems: 'flex-end' }}>
+          <Text style={{ fontSize: 10, color: '#9CA3AF', fontWeight: '500', letterSpacing: 0.5, textTransform: 'uppercase' }}>Welcome</Text>
+          <Text style={{ fontSize: 13, fontWeight: '600', color: '#111827', lineHeight: 17 }}>{user.name}</Text>
         </View>
-        <View className="h-8 w-8 rounded-full bg-[#2F6B2F] items-center justify-center">
-          <Text className="text-white text-[12px] font-bold">{initials}</Text>
+        <View
+          style={{
+            height: 34,
+            width: 34,
+            borderRadius: 17,
+            backgroundColor: '#2F6B2F',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <Text style={{ color: '#FFFFFF', fontSize: 12, fontWeight: '700' }}>{initials}</Text>
         </View>
       </View>
     </View>

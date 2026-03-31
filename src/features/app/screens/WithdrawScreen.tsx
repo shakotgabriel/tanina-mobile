@@ -12,35 +12,35 @@ import CountryPicker, {
 } from '@/src/features/app/components/CountryPicker';
 
 type Step = 'select_method' | 'select_country' | 'form';
-type DepositMethod = 'agent' | 'bank' | 'mobile_money';
+type WithdrawMethod = 'agent' | 'mobile_money' | 'bank';
 
-const DEPOSIT_METHODS: Method[] = [
+const WITHDRAW_METHODS: Method[] = [
   {
     id: 'agent',
     icon: 'person-circle-outline',
-    title: 'Deposit via Agent',
-    description: 'Deposit cash through a nearby agent',
-  },
-  {
-    id: 'bank',
-    icon: 'business-outline',
-    title: 'Deposit via Bank Account',
-    description: 'Transfer from your bank account',
+    title: 'Withdraw to Agent',
+    description: 'Collect cash from a nearby agent',
   },
   {
     id: 'mobile_money',
     icon: 'phone-portrait-outline',
-    title: 'Deposit via Mobile Money',
-    description: 'Deposit using mobile money from Uganda, Kenya, Rwanda or South Sudan',
+    title: 'Withdraw to Mobile Money',
+    description: 'Send funds directly to your mobile wallet',
+  },
+  {
+    id: 'bank',
+    icon: 'business-outline',
+    title: 'Withdraw to Bank',
+    description: 'Transfer funds to your bank account',
   },
 ];
 
 const BANKS = ['Equity Bank', 'KCB Bank', 'Centenary Bank', 'Stanbic Bank', 'ABSA Bank'];
 
-export default function DepositScreen() {
+export default function WithdrawScreen() {
   const router = useRouter();
   const [step, setStep] = useState<Step>('select_method');
-  const [method, setMethod] = useState<DepositMethod | null>(null);
+  const [method, setMethod] = useState<WithdrawMethod | null>(null);
   const [country, setCountry] = useState<Country | null>(null);
   const [provider, setProvider] = useState('');
   const [agentCode, setAgentCode] = useState('');
@@ -62,7 +62,7 @@ export default function DepositScreen() {
   }
 
   function handleMethodSelect(id: string) {
-    setMethod(id as DepositMethod);
+    setMethod(id as WithdrawMethod);
     if (id === 'mobile_money') {
       setStep('select_country');
     } else {
@@ -77,9 +77,14 @@ export default function DepositScreen() {
   }
 
   const stepTitle: Record<Step, string> = {
-    select_method: 'Deposit',
+    select_method: 'Withdraw',
     select_country: 'Select Country',
-    form: method === 'agent' ? 'Deposit via Agent' : method === 'bank' ? 'Deposit via Bank' : `Deposit via Mobile Money`,
+    form:
+      method === 'agent'
+        ? 'Withdraw to Agent'
+        : method === 'bank'
+        ? 'Withdraw to Bank'
+        : 'Withdraw to Mobile Money',
   };
 
   const providers = country ? MOBILE_MONEY_PROVIDERS[country.code] ?? [] : [];
@@ -87,7 +92,7 @@ export default function DepositScreen() {
   return (
     <ActionScreen title={stepTitle[step]} onBack={handleBack}>
       {step === 'select_method' && (
-        <MethodSelector methods={DEPOSIT_METHODS} onSelect={handleMethodSelect} />
+        <MethodSelector methods={WITHDRAW_METHODS} onSelect={handleMethodSelect} />
       )}
 
       {step === 'select_country' && (
@@ -127,7 +132,11 @@ export default function DepositScreen() {
                     bank === b ? 'border-[#2F6B2F]' : 'border-gray-100'
                   }`}
                 >
-                  <Text className={`text-sm font-medium ${bank === b ? 'text-[#2F6B2F]' : 'text-gray-700'}`}>{b}</Text>
+                  <Text
+                    className={`text-sm font-medium ${bank === b ? 'text-[#2F6B2F]' : 'text-gray-700'}`}
+                  >
+                    {b}
+                  </Text>
                   {bank === b && <Ionicons name="checkmark-circle" size={18} color="#2F6B2F" />}
                 </TouchableOpacity>
               ))}
@@ -166,7 +175,11 @@ export default function DepositScreen() {
 
           <View className="gap-2">
             <Text className="text-gray-700 text-sm font-medium">Mobile Money Provider</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={{ gap: 8 }}
+            >
               {providers.map((p) => (
                 <TouchableOpacity
                   key={p.id}
@@ -175,7 +188,9 @@ export default function DepositScreen() {
                     provider === p.id ? 'bg-[#2F6B2F] border-[#2F6B2F]' : 'bg-white border-gray-200'
                   }`}
                 >
-                  <Text className={`text-sm font-medium ${provider === p.id ? 'text-white' : 'text-gray-700'}`}>
+                  <Text
+                    className={`text-sm font-medium ${provider === p.id ? 'text-white' : 'text-gray-700'}`}
+                  >
                     {p.name}
                   </Text>
                 </TouchableOpacity>

@@ -26,7 +26,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   primaryButton: {
-    backgroundColor: '#0EA5E9',
+    backgroundColor: '#2F6B2F',
   },
   secondaryButton: {
     backgroundColor: '#FFFFFF',

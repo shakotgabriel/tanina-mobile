@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Modal,
@@ -16,7 +16,23 @@ import { useBalancesQuery, useTransactionsQuery } from '@/src/hooks/useQueries';
 import { formatCurrency } from '@/src/lib/utils/currency';
 
 const SECONDARY_CURRENCIES = ['SSP', 'KSH', 'UGX', 'RWF'];
-const FX_RATES: Record<string, number> = { SSP: 1300, KSH: 130, UGX: 3700, RWF: 1280 };
+const ALL_CURRENCIES = ['USD', 'SSP', 'KSH', 'UGX', 'RWF'];
+
+const FX_RATES: Record<string, number> = {
+  USD: 1,
+  SSP: 1300,
+  KSH: 130,
+  UGX: 3700,
+  RWF: 1280,
+};
+
+const CURRENCY_META: Record<string, { flag: string; name: string }> = {
+  USD: { flag: '🇺🇸', name: 'US Dollar' },
+  SSP: { flag: '🇸🇸', name: 'S. Sudan Pound' },
+  KSH: { flag: '🇰🇪', name: 'Kenya Shilling' },
+  UGX: { flag: '🇺🇬', name: 'Uganda Shilling' },
+  RWF: { flag: '🇷🇼', name: 'Rwanda Franc' },
+};
 
 const MOBILE_MONEY_PROVIDERS: Record<string, { name: string; placeholder: string }[]> = {
   SSP: [{ name: 'MTN MoMo', placeholder: '+211 9XX XXX XXX' }],
@@ -144,15 +160,57 @@ function TopUpModal({
 
 // ─── Exchange Modal ───────────────────────────────────────────────────────────
 
-function ExchangeModal({ visible, onClose }: { visible: boolean; onClose: () => void }) {
-  const [toCurrency, setToCurrency] = useState('KSH');
+function ExchangeModal({
+  visible,
+  onClose,
+  defaultFrom = 'USD',
+  balances = [],
+}: {
+  visible: boolean;
+  onClose: () => void;
+  defaultFrom?: string;
+  balances?: any[];
+}) {
+  const [fromCurrency, setFromCurrency] = useState(defaultFrom);
+  const [toCurrency, setToCurrency] = useState(defaultFrom === 'USD' ? 'KSH' : 'USD');
   const [fromAmount, setFromAmount] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const rate = FX_RATES[toCurrency] ?? 1;
+  useEffect(() => {
+    if (visible) {
+      setFromCurrency(defaultFrom);
+      setToCurrency(defaultFrom === 'USD' ? 'KSH' : 'USD');
+      setFromAmount('');
+    }
+  }, [visible, defaultFrom]);
+
   const numericAmount = Number(fromAmount);
   const fee = numericAmount * 0.01;
+  const rate = (FX_RATES[toCurrency] ?? 1) / (FX_RATES[fromCurrency] ?? 1);
   const toAmount = (numericAmount - fee) * rate;
+
+  const fromBalance = (balances as any[]).find((b) => b.currency === fromCurrency);
+  const fromBalanceLabel = fromBalance
+    ? formatCurrency(fromBalance.amountMinor, fromCurrency)
+    : '—';
+
+  function handleSwap() {
+    const prev = fromCurrency;
+    setFromCurrency(toCurrency);
+    setToCurrency(prev);
+    setFromAmount('');
+  }
+
+  function handleSelectFrom(c: string) {
+    if (c === toCurrency) setToCurrency(fromCurrency);
+    setFromCurrency(c);
+    setFromAmount('');
+  }
+
+  function handleSelectTo(c: string) {
+    if (c === fromCurrency) setFromCurrency(toCurrency);
+    setToCurrency(c);
+  }
 
   const handleConfirm = async () => {
     if (!fromAmount || isNaN(numericAmount) || numericAmount <= 0) {
@@ -165,26 +223,58 @@ function ExchangeModal({ visible, onClose }: { visible: boolean; onClose: () => 
     Toast.show({
       type: 'success',
       text1: 'Exchange submitted',
-      text2: `USD ${fromAmount} → ${toCurrency} ${toAmount.toFixed(2)}`,
+      text2: `${fromCurrency} ${numericAmount.toFixed(2)} → ${toCurrency} ${toAmount.toFixed(2)}`,
     });
     setFromAmount('');
     onClose();
   };
 
+  const rateLabel =
+    rate >= 1
+      ? `1 ${fromCurrency} = ${rate.toFixed(2)} ${toCurrency}`
+      : `1 ${toCurrency} = ${(1 / rate).toFixed(2)} ${fromCurrency}`;
+
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <View className="flex-1 justify-end bg-black/40">
         <View className="bg-white rounded-t-3xl px-5 pt-5 pb-8">
+
+          {/* Header */}
           <View className="flex-row items-center justify-between mb-5">
-            <Text className="text-gray-900 text-lg font-bold">Exchange Currency</Text>
+            <View>
+              <Text className="text-gray-900 text-lg font-bold">Exchange Currency</Text>
+              <Text className="text-gray-400 text-xs mt-0.5">Convert between any of your wallets</Text>
+            </View>
             <TouchableOpacity onPress={onClose} className="p-1">
               <Ionicons name="close" size={22} color="#6B7280" />
             </TouchableOpacity>
           </View>
 
-          <Text className="text-gray-500 text-xs font-semibold uppercase tracking-wider mb-2">From (USD)</Text>
-          <View className="flex-row items-center bg-gray-50 border border-gray-200 rounded-xl px-4 mb-4">
-            <Text className="text-gray-500 mr-2 text-sm font-medium">USD</Text>
+          {/* FROM currency chips */}
+          <Text className="text-gray-500 text-xs font-semibold uppercase tracking-wider mb-2">From</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mb-3" contentContainerStyle={{ gap: 8 }}>
+            {ALL_CURRENCIES.map((c) => {
+              const meta = CURRENCY_META[c];
+              const active = fromCurrency === c;
+              return (
+                <TouchableOpacity
+                  key={c}
+                  onPress={() => handleSelectFrom(c)}
+                  className={`flex-row items-center gap-1.5 px-3 py-2 rounded-full border ${active ? 'bg-[#2F6B2F] border-[#2F6B2F]' : 'border-gray-200 bg-white'}`}
+                >
+                  <Text style={{ fontSize: 13 }}>{meta.flag}</Text>
+                  <Text className={`text-sm font-semibold ${active ? 'text-white' : 'text-gray-600'}`}>{c}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+
+          {/* From amount input */}
+          <View className="flex-row items-center bg-gray-50 border border-gray-200 rounded-xl px-4 mb-1">
+            <View className="mr-3">
+              <Text style={{ fontSize: 16 }}>{CURRENCY_META[fromCurrency]?.flag}</Text>
+            </View>
+            <Text className="text-gray-500 mr-2 text-sm font-semibold">{fromCurrency}</Text>
             <TextInput
               className="flex-1 py-3 text-gray-900 text-base"
               keyboardType="decimal-pad"
@@ -194,35 +284,62 @@ function ExchangeModal({ visible, onClose }: { visible: boolean; onClose: () => 
               onChangeText={setFromAmount}
             />
           </View>
+          <Text className="text-gray-400 text-xs mb-3 ml-1">Available: {fromBalanceLabel}</Text>
 
-          <Text className="text-gray-500 text-xs font-semibold uppercase tracking-wider mb-2">To Currency</Text>
+          {/* Swap button */}
+          <View className="items-center mb-3">
+            <TouchableOpacity
+              onPress={handleSwap}
+              className="flex-row items-center gap-2 bg-[#F0F7F0] border border-[#2F6B2F]/20 rounded-full px-4 py-2"
+            >
+              <Ionicons name="swap-vertical" size={18} color="#2F6B2F" />
+              <Text className="text-[#2F6B2F] text-xs font-semibold">Swap</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* TO currency chips */}
+          <Text className="text-gray-500 text-xs font-semibold uppercase tracking-wider mb-2">To</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mb-4" contentContainerStyle={{ gap: 8 }}>
-            {SECONDARY_CURRENCIES.map((c) => (
-              <TouchableOpacity
-                key={c}
-                onPress={() => setToCurrency(c)}
-                className={`px-4 py-2 rounded-full border ${toCurrency === c ? 'bg-[#2F6B2F] border-[#2F6B2F]' : 'border-gray-200 bg-white'}`}
-              >
-                <Text className={`text-sm font-semibold ${toCurrency === c ? 'text-white' : 'text-gray-600'}`}>{c}</Text>
-              </TouchableOpacity>
-            ))}
+            {ALL_CURRENCIES.filter((c) => c !== fromCurrency).map((c) => {
+              const meta = CURRENCY_META[c];
+              const active = toCurrency === c;
+              return (
+                <TouchableOpacity
+                  key={c}
+                  onPress={() => handleSelectTo(c)}
+                  className={`flex-row items-center gap-1.5 px-3 py-2 rounded-full border ${active ? 'bg-[#2F6B2F] border-[#2F6B2F]' : 'border-gray-200 bg-white'}`}
+                >
+                  <Text style={{ fontSize: 13 }}>{meta.flag}</Text>
+                  <Text className={`text-sm font-semibold ${active ? 'text-white' : 'text-gray-600'}`}>{c}</Text>
+                </TouchableOpacity>
+              );
+            })}
           </ScrollView>
 
-          {numericAmount > 0 && (
-            <View className="bg-gray-50 border border-gray-100 rounded-xl p-4 mb-5 gap-2">
+          {/* Rate preview */}
+          {numericAmount > 0 ? (
+            <View className="bg-[#F0F7F0] border border-[#2F6B2F]/15 rounded-xl p-4 mb-5 gap-2">
               <View className="flex-row justify-between">
-                <Text className="text-gray-500 text-sm">Exchange Rate</Text>
-                <Text className="text-gray-800 text-sm font-medium">1 USD = {rate} {toCurrency}</Text>
+                <Text className="text-gray-500 text-sm">Rate</Text>
+                <Text className="text-gray-800 text-sm font-medium">{rateLabel}</Text>
               </View>
               <View className="flex-row justify-between">
                 <Text className="text-gray-500 text-sm">Fee (1%)</Text>
-                <Text className="text-gray-800 text-sm font-medium">USD {fee.toFixed(2)}</Text>
+                <Text className="text-gray-800 text-sm font-medium">
+                  {fromCurrency} {fee.toFixed(2)}
+                </Text>
               </View>
-              <View className="h-px bg-gray-200" />
-              <View className="flex-row justify-between">
+              <View className="h-px bg-[#2F6B2F]/15" />
+              <View className="flex-row justify-between items-center">
                 <Text className="text-gray-700 text-sm font-semibold">You receive</Text>
-                <Text className="text-[#2F6B2F] text-sm font-bold">{toCurrency} {toAmount.toFixed(2)}</Text>
+                <Text className="text-[#2F6B2F] text-base font-bold">
+                  {toCurrency} {toAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </Text>
               </View>
+            </View>
+          ) : (
+            <View className="bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 mb-5">
+              <Text className="text-gray-400 text-sm text-center">Enter an amount to see the exchange preview</Text>
             </View>
           )}
 
@@ -233,7 +350,9 @@ function ExchangeModal({ visible, onClose }: { visible: boolean; onClose: () => 
           >
             {loading
               ? <ActivityIndicator color="#fff" />
-              : <Text className="text-white font-bold text-base">Confirm Exchange</Text>}
+              : <Text className="text-white font-bold text-base">
+                  {fromCurrency} → {toCurrency} · Confirm
+                </Text>}
           </TouchableOpacity>
         </View>
       </View>
@@ -249,6 +368,7 @@ export default function WalletScreen() {
   const [topUpVisible, setTopUpVisible] = useState(false);
   const [topUpCurrency, setTopUpCurrency] = useState<string | undefined>();
   const [exchangeVisible, setExchangeVisible] = useState(false);
+  const [exchangeFrom, setExchangeFrom] = useState<string>('USD');
 
   const primaryData = (balances as any[]).find((b) => b.currency === 'USD') ?? (balances as any[])[0];
   const recent = (transactions as any[]).slice(0, 4);
@@ -256,6 +376,11 @@ export default function WalletScreen() {
   const openTopUp = (currency?: string) => {
     setTopUpCurrency(currency);
     setTopUpVisible(true);
+  };
+
+  const openExchange = (currency = 'USD') => {
+    setExchangeFrom(currency);
+    setExchangeVisible(true);
   };
 
   return (
@@ -281,13 +406,20 @@ export default function WalletScreen() {
             </Text>
           </View>
         )}
-        <View className="mt-5">
+        <View className="flex-row gap-2 mt-5">
           <TouchableOpacity
-            onPress={() => setExchangeVisible(true)}
-            className="flex-row items-center justify-center gap-2 bg-white/20 rounded-xl py-3"
+            onPress={() => openExchange('USD')}
+            className="flex-1 flex-row items-center justify-center gap-2 bg-white/20 rounded-xl py-3"
           >
             <Ionicons name="swap-horizontal-outline" size={18} color="#fff" />
             <Text className="text-white font-semibold text-sm">Exchange</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => openTopUp('USD')}
+            className="flex-1 flex-row items-center justify-center gap-2 bg-white/20 rounded-xl py-3"
+          >
+            <Ionicons name="add-circle-outline" size={18} color="#fff" />
+            <Text className="text-white font-semibold text-sm">Top Up</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -296,24 +428,37 @@ export default function WalletScreen() {
       <Text className="text-gray-700 text-base font-semibold mb-3">Other Wallets</Text>
       {SECONDARY_CURRENCIES.map((code) => {
         const pocket = (balances as any[]).find((b) => b.currency === code);
+        const meta = CURRENCY_META[code];
         return (
-          <View key={code} className="flex-row items-center bg-white border border-gray-100 rounded-xl px-4 py-3 mb-2">
-            <View className="w-10 h-10 rounded-full bg-gray-100 items-center justify-center mr-3">
-              <Text className="text-gray-600 text-[11px] font-bold">{code}</Text>
+          <View key={code} className="bg-white border border-gray-100 rounded-2xl px-4 pt-3 pb-3 mb-2">
+            <View className="flex-row items-center mb-3">
+              <View className="w-10 h-10 rounded-full bg-[#F0F7F0] items-center justify-center mr-3">
+                <Text style={{ fontSize: 20 }}>{meta?.flag ?? '💵'}</Text>
+              </View>
+              <View className="flex-1">
+                <Text className="text-gray-800 text-sm font-semibold">{meta?.name ?? code}</Text>
+                <Text className="text-gray-400 text-xs mt-0.5">
+                  {formatCurrency(pocket?.amountMinor ?? 0, code)}
+                </Text>
+              </View>
+              <Text className="text-[#2F6B2F] text-xs font-bold">{code}</Text>
             </View>
-            <View className="flex-1">
-              <Text className="text-gray-800 text-sm font-semibold">{code} Wallet</Text>
-              <Text className="text-gray-400 text-xs mt-0.5">
-                {formatCurrency(pocket?.amountMinor ?? 0, code)}
-              </Text>
+            <View className="flex-row gap-2">
+              <TouchableOpacity
+                onPress={() => openExchange(code)}
+                className="flex-1 flex-row items-center justify-center gap-1 bg-[#F0F7F0] border border-[#2F6B2F]/20 rounded-xl py-2"
+              >
+                <Ionicons name="swap-horizontal-outline" size={14} color="#2F6B2F" />
+                <Text className="text-[#2F6B2F] text-xs font-semibold">Exchange</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => openTopUp(code)}
+                className="flex-1 flex-row items-center justify-center gap-1 border border-[#2F6B2F] rounded-xl py-2"
+              >
+                <Ionicons name="add" size={14} color="#2F6B2F" />
+                <Text className="text-[#2F6B2F] text-xs font-semibold">Top Up</Text>
+              </TouchableOpacity>
             </View>
-            <TouchableOpacity
-              onPress={() => openTopUp(code)}
-              className="flex-row items-center gap-1 border border-[#2F6B2F] rounded-lg px-3 py-1.5"
-            >
-              <Ionicons name="add" size={14} color="#2F6B2F" />
-              <Text className="text-[#2F6B2F] text-xs font-semibold">Top Up</Text>
-            </TouchableOpacity>
           </View>
         );
       })}
@@ -355,7 +500,12 @@ export default function WalletScreen() {
       </View>
 
       <TopUpModal visible={topUpVisible} onClose={() => setTopUpVisible(false)} defaultCurrency={topUpCurrency} />
-      <ExchangeModal visible={exchangeVisible} onClose={() => setExchangeVisible(false)} />
+      <ExchangeModal
+        visible={exchangeVisible}
+        onClose={() => setExchangeVisible(false)}
+        defaultFrom={exchangeFrom}
+        balances={balances as any[]}
+      />
     </Screen>
   );
 }

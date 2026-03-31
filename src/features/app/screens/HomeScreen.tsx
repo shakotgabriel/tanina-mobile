@@ -9,8 +9,8 @@ import { formatCurrency } from '@/src/lib/utils/currency';
 const QUICK_ACTIONS = [
   { label: 'Send', icon: 'paper-plane-outline' as const, route: '/send' },
   { label: 'Deposit', icon: 'arrow-down-circle-outline' as const, route: '/deposit' },
-  { label: 'Withdraw', icon: 'arrow-up-circle-outline' as const, route: '/convert' },
-  { label: 'Payments', icon: 'cash-outline' as const, route: '/cashout' },
+  { label: 'Withdraw', icon: 'arrow-up-circle-outline' as const, route: '/withdraw' },
+  { label: 'Payments', icon: 'cash-outline' as const, route: '/payments' },
 ];
 
 function txStatusClass(status: string) {
