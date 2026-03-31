@@ -3,7 +3,7 @@ import { Text, View } from 'react-native';
 import { EmptyState } from '@/src/components/common';
 import Screen from '@/src/components/layout/Screen';
 
-export default function CardsScreen() {
+export default function WalletScreen() {
   return (
     <Screen>
       <View style={{ gap: 12 }}>
