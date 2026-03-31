@@ -44,6 +44,7 @@ export type RegisterRequest = {
   firstName: string;
   lastName: string;
   password: string;
+  phoneNumber?: string;
   role?: string;
   accountType?: string;
 };

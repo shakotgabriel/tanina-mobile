@@ -1,6 +1,6 @@
 import { apiClient } from '@/src/lib/api/client';
 import { ENDPOINTS } from '@/src/lib/api/endpoints';
-import { AuthTokens, Transaction, User, UserDTO, WalletBalance } from '@/src/types';
+import { AuthResponse, P2PTransfer, P2PTransferRequest, UserDTO, WalletPocketDTO } from '@/src/types';
 
 export interface LoginPayload {
   email: string;
@@ -21,11 +21,11 @@ export interface ChangePasswordPayload {
 
 export const api = {
   login: async (payload: LoginPayload) => {
-    const response = await apiClient.post<AuthTokens>(ENDPOINTS.auth.login, payload);
+    const response = await apiClient.post<AuthResponse>(ENDPOINTS.auth.login, payload);
     return response.data;
   },
   register: async (payload: { firstName: string; lastName: string; email: string; password: string; phoneNumber?: string; accountType?: string }) => {
-    const response = await apiClient.post<User>(ENDPOINTS.auth.register, payload);
+    const response = await apiClient.post<UserDTO>(ENDPOINTS.auth.register, payload);
     return response.data;
   },
   verifyEmail: async (payload: { email: string; otp: string }) => {
@@ -37,15 +37,15 @@ export const api = {
     return response.data;
   },
   getMe: async () => {
-    const response = await apiClient.get<User>(ENDPOINTS.auth.me);
+    const response = await apiClient.get<UserDTO>(ENDPOINTS.auth.me);
     return response.data;
   },
   getBalances: async () => {
-    const response = await apiClient.get<WalletBalance[]>(ENDPOINTS.wallet.balances);
+    const response = await apiClient.get<WalletPocketDTO[]>(ENDPOINTS.wallet.balances);
     return response.data;
   },
   getTransactions: async () => {
-    const response = await apiClient.get<Transaction[]>(ENDPOINTS.wallet.transactions);
+    const response = await apiClient.get<P2PTransfer[]>(ENDPOINTS.wallet.transactions);
     return response.data;
   },
   updateProfile: async (payload: UpdateProfilePayload) => {
@@ -54,6 +54,14 @@ export const api = {
   },
   changePassword: async (payload: ChangePasswordPayload) => {
     const response = await apiClient.post(ENDPOINTS.auth.changePassword, payload);
+    return response.data;
+  },
+  lookupUserByEmail: async (email: string) => {
+    const response = await apiClient.get<UserDTO>(ENDPOINTS.user.lookup, { params: { email } });
+    return response.data;
+  },
+  sendP2P: async (payload: P2PTransferRequest) => {
+    const response = await apiClient.post<P2PTransfer>(ENDPOINTS.wallet.send, payload);
     return response.data;
   },
 };
