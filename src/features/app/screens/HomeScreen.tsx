@@ -9,8 +9,8 @@ import { formatCurrency } from '@/src/lib/utils/currency';
 const QUICK_ACTIONS = [
   { label: 'Send', icon: 'paper-plane-outline' as const, route: '/send' },
   { label: 'Deposit', icon: 'arrow-down-circle-outline' as const, route: '/deposit' },
-  { label: 'Convert', icon: 'swap-horizontal-outline' as const, route: '/convert' },
-  { label: 'Cash Out', icon: 'cash-outline' as const, route: '/cashout' },
+  { label: 'Withdraw', icon: 'arrow-up-circle-outline' as const, route: '/convert' },
+  { label: 'Payments', icon: 'cash-outline' as const, route: '/cashout' },
 ];
 
 function txStatusClass(status: string) {
@@ -58,10 +58,10 @@ export default function HomeScreen() {
           Available Balance
         </Text>
         <Text className="text-white text-4xl font-bold mb-1">
-          {primary ? formatCurrency(primary.amountMinor, primary.currency) : '—'}
+          {formatCurrency(primary?.amountMinor ?? 0, primary?.currency ?? 'USD')}
         </Text>
         <Text className="text-white/50 text-xs">
-          {primary?.currency ?? ''} Wallet
+          {primary?.currency ?? 'USD'} Wallet
         </Text>
 
         {/* Quick actions row inside card */}
