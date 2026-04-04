@@ -77,7 +77,7 @@ export default function DepositScreen() {
       return;
     }
     if (!provider) {
-      notify.validation('Select a provider');
+      notify.validation('Select a mobile money provider');
       return;
     }
     if (!country) {
@@ -129,7 +129,7 @@ export default function DepositScreen() {
           </View>
 
           <View className="gap-2">
-            <Text className="text-gray-700 text-sm font-medium">Mobile Money Provider</Text>
+            <Text className="text-gray-700 text-sm font-medium">Mobile Money Network</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
               {providers.map((p) => (
                 <TouchableOpacity
@@ -148,7 +148,7 @@ export default function DepositScreen() {
           </View>
 
           <Input
-            label="Mobile Money Number"
+            label="Mobile Money Phone Number"
             placeholder="e.g. 0700 000 000"
             keyboardType="phone-pad"
             value={phone}

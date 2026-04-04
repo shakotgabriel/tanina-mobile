@@ -5,12 +5,63 @@ export type TxLike = {
   direction?: 'CREDIT' | 'DEBIT';
 };
 
+type TxDisplayLike = {
+  counterpartyLabel?: string;
+  counterparty?: string;
+  counterpartyUserId?: string;
+  description?: string;
+  currency?: string;
+};
+
 export function txLabel(type?: string) {
+  switch (type?.toUpperCase()) {
+    case 'MOBILE_MONEY_DEPOSIT': return 'Mobile Money Deposit';
+    case 'P2P_TRANSFER': return 'Send Money';
+    case 'MERCHANT_PAYMENT': return 'Merchant Payment';
+    case 'BILL_PAYMENT': return 'Utility Bill Payment';
+    case 'CASHOUT': return 'Withdrawal';
+    case 'TOPUP': return 'Wallet Top Up';
+    case 'SEND': return 'Send Money';
+    case 'PAYMENT': return 'Payment';
+    case 'REFUND': return 'Refund';
+    case 'WITHDRAWAL': return 'Withdrawal';
+    default:
+      break;
+  }
+
   return (type ?? '')
     .toLowerCase()
     .split('_')
     .map((chunk) => chunk.charAt(0).toUpperCase() + chunk.slice(1))
     .join(' ');
+}
+
+export function statusLabel(status?: string) {
+  switch (status?.toUpperCase()) {
+    case 'COMPLETED': return 'Completed';
+    case 'PENDING': return 'Pending';
+    case 'FAILED': return 'Failed';
+    case 'CANCELLED': return 'Cancelled';
+    case 'EXPIRED': return 'Expired';
+    default:
+      return txLabel(status);
+  }
+}
+
+export function directionLabel(direction?: 'CREDIT' | 'DEBIT') {
+  if (direction === 'CREDIT') return 'Received';
+  if (direction === 'DEBIT') return 'Sent';
+  return 'Unknown';
+}
+
+export function txSubtitle(tx: TxDisplayLike) {
+  return (
+    tx.counterpartyLabel ??
+    tx.counterparty ??
+    (tx.counterpartyUserId ? 'Contact details are loading...' : undefined) ??
+    tx.description ??
+    (tx.currency ? `${tx.currency} transaction` : 'Transaction')
+  );
 }
 
 export function txIcon(type?: string): React.ComponentProps<typeof Ionicons>['name'] {

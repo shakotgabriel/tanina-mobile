@@ -12,7 +12,7 @@ import CountryPicker, {
   MOBILE_MONEY_PROVIDERS,
 } from '@/src/features/app/components/CountryPicker';
 import { useFormValidation } from '@/src/hooks/useFormValidation';
-import { useCashoutInitiateMutation, useCashoutConfirmMutation } from '@/src/hooks/useQueries';
+import { useWithdrawalInitiateMutation, useWithdrawalConfirmMutation } from '@/src/hooks/useQueries';
 
 type Step = 'select_method' | 'select_country' | 'form';
 type WithdrawMethod = 'mobile_money';
@@ -21,15 +21,15 @@ const WITHDRAW_METHODS: Method[] = [
   {
     id: 'mobile_money',
     icon: 'phone-portrait-outline',
-    title: 'Cashout',
-    description: 'Initiate and confirm cashout with OTP',
+    title: 'Withdraw to Mobile Money',
+    description: 'Initiate and confirm withdrawal with OTP',
   },
 ];
 
 export default function WithdrawScreen() {
   const router = useRouter();
-  const initiateCashout = useCashoutInitiateMutation();
-  const confirmCashout = useCashoutConfirmMutation();
+  const initiateWithdrawal = useWithdrawalInitiateMutation();
+  const confirmWithdrawal = useWithdrawalConfirmMutation();
 
   const [step, setStep] = useState<Step>('select_method');
   const [method, setMethod] = useState<WithdrawMethod | null>(null);
@@ -39,7 +39,7 @@ export default function WithdrawScreen() {
   const [phone, setPhone] = useState('');
   const [amount, setAmount] = useState('');
   const [otp, setOtp] = useState('');
-  const [cashoutId, setCashoutId] = useState<string | null>(null);
+  const [withdrawalId, setWithdrawalId] = useState<string | null>(null);
   const [otpStep, setOtpStep] = useState(false);
   const [success, setSuccess] = useState(false);
 
@@ -49,8 +49,8 @@ export default function WithdrawScreen() {
   );
   const { errors, validateField, touchField } = useFormValidation(
     {
-      provider: (value) => (String(value).trim() ? null : 'Select a provider'),
-      agentUserId: (value) => (String(value).trim() ? null : 'Agent user ID is required'),
+      provider: (value) => (String(value).trim() ? null : 'Select a mobile money provider'),
+      agentUserId: (value) => (String(value).trim() ? null : 'Withdrawal agent ID is required'),
       phone: (value) => (String(value).trim().length >= 8 ? null : 'Enter a valid phone number'),
       amount: (value) => {
         const parsed = Number(value);
@@ -100,7 +100,7 @@ export default function WithdrawScreen() {
       return;
     }
 
-    initiateCashout.mutate(
+    initiateWithdrawal.mutate(
       {
         amountMinor: Math.round(Number(amount) * 100),
         currency: country.code,
@@ -108,26 +108,26 @@ export default function WithdrawScreen() {
       },
       {
         onSuccess: (data: any) => {
-          setCashoutId(data.id);
+          setWithdrawalId(data.id);
           setOtpStep(true);
           notify.info('Verify with OTP', 'Check your email/SMS for the OTP code');
         },
         onError: () => {
-          notify.error('Cashout failed', 'Please try again');
+          notify.error('Withdrawal request failed', 'Please try again');
         },
       }
     );
   };
 
-  const handleConfirmCashout = () => {
+  const handleConfirmWithdrawal = () => {
     if (validateField('otp', otp)) {
       notify.validation('Enter a valid OTP');
       return;
     }
 
-    confirmCashout.mutate(
+    confirmWithdrawal.mutate(
       {
-        id: cashoutId!,
+        id: withdrawalId!,
         payload: { confirmationCode: otp },
       },
       {
@@ -144,7 +144,7 @@ export default function WithdrawScreen() {
   const stepTitle: Record<Step, string> = {
     select_method: 'Withdraw',
     select_country: 'Select Country',
-    form: 'Cashout',
+    form: 'Withdrawal',
   };
 
   const providers = country ? MOBILE_MONEY_PROVIDERS[country.code] ?? [] : [];
@@ -173,7 +173,7 @@ export default function WithdrawScreen() {
           </View>
 
           <View className="gap-2">
-            <Text className="text-gray-700 text-sm font-medium">Mobile Money Provider</Text>
+            <Text className="text-gray-700 text-sm font-medium">Mobile Money Network</Text>
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
@@ -203,7 +203,7 @@ export default function WithdrawScreen() {
           </View>
 
           <Input
-            label="Agent User ID"
+            label="Withdrawal Agent ID"
             placeholder="e.g. 44444444-4444-4444-4444-444444444444"
             autoCapitalize="none"
             value={agentUserId}
@@ -215,7 +215,7 @@ export default function WithdrawScreen() {
             error={errors.agentUserId}
           />
           <Input
-            label="Mobile Money Number"
+            label="Mobile Money Phone Number"
             placeholder="e.g. 0700 000 000"
             keyboardType="phone-pad"
             value={phone}
@@ -238,10 +238,10 @@ export default function WithdrawScreen() {
             }}
             error={errors.amount}
           />
-          <Button onPress={handleMobileMoneyWithdraw} disabled={initiateCashout.isPending}>
-            {initiateCashout.isPending ? 'Requesting OTP...' : 'Continue'}
+          <Button onPress={handleMobileMoneyWithdraw} disabled={initiateWithdrawal.isPending}>
+            {initiateWithdrawal.isPending ? 'Requesting OTP...' : 'Continue'}
           </Button>
-          {initiateCashout.isPending ? (
+          {initiateWithdrawal.isPending ? (
             <Text className="text-gray-500 text-xs">Submitting request and waiting for OTP challenge...</Text>
           ) : null}
         </View>
@@ -279,8 +279,8 @@ export default function WithdrawScreen() {
             <Text className="text-gray-500 text-xs mt-1">Code expires in 5 minutes.</Text>
           </View>
 
-          <Button onPress={handleConfirmCashout} disabled={confirmCashout.isPending}>
-            {confirmCashout.isPending ? 'Verifying...' : 'Confirm Withdrawal'}
+          <Button onPress={handleConfirmWithdrawal} disabled={confirmWithdrawal.isPending}>
+            {confirmWithdrawal.isPending ? 'Verifying...' : 'Confirm Withdrawal'}
           </Button>
 
           <TouchableOpacity onPress={() => setOtpStep(false)} className="items-center py-2">

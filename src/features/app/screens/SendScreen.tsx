@@ -73,7 +73,7 @@ function CountryChipList({ selected, onSelect }: { selected: string; onSelect: (
             >
               <Text style={{ fontSize: 16, marginRight: 5 }}>{country.flag}</Text>
               <Text style={[styles.currencyChipText, active && styles.currencyChipTextActive]}>
-                {country.code}
+                {country.name}
               </Text>
             </TouchableOpacity>
           );
@@ -370,6 +370,10 @@ function InternationalTransferForm({ onDone }: { onDone: () => void }) {
   );
 
   const destinationCurrency = COUNTRY_TO_CURRENCY[destinationCountry] ?? 'KES';
+  const destinationCountryInfo = SUPPORTED_COUNTRIES.find((country) => country.code === destinationCountry);
+  const destinationLabel = destinationCountryInfo
+    ? `${destinationCountryInfo.name} (${destinationCountryInfo.code})`
+    : destinationCountry;
   const providers = MOBILE_MONEY_PROVIDERS[destinationCountry as keyof typeof MOBILE_MONEY_PROVIDERS] ?? [];
   const selectedProvider = providers.find((provider) => provider.id === providerId) ?? providers[0];
   const amountMinor = Math.round(Number(amount || '0') * 100);
@@ -425,7 +429,7 @@ function InternationalTransferForm({ onDone }: { onDone: () => void }) {
         </View>
         <Text style={styles.successTitle}>Sent!</Text>
         <Text style={styles.successSub}>
-          Demo transfer to {mobileNumber} via {selectedProvider?.name ?? 'mobile money'} in {destinationCountry}
+          Demo transfer to {mobileNumber} via {selectedProvider?.name ?? 'mobile money network'} in {destinationLabel}
         </Text>
         <TouchableOpacity style={styles.doneBtn} onPress={onDone} activeOpacity={0.85}>
           <Text style={styles.doneBtnText}>Done</Text>
@@ -469,7 +473,7 @@ function InternationalTransferForm({ onDone }: { onDone: () => void }) {
         }}
       />
 
-      <Text style={styles.label}>Mobile money provider</Text>
+      <Text style={styles.label}>Payout network</Text>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 18 }}>
         <View style={{ flexDirection: 'row', gap: 8 }}>
           {providers.map((provider) => {
@@ -539,7 +543,7 @@ function InternationalTransferForm({ onDone }: { onDone: () => void }) {
         )}
         {quote && (
           <Text style={{ fontSize: 13, color: '#6B7280', marginTop: 4 }}>
-            Provider: {selectedProvider?.name ?? 'Mobile money'} · Network fee included in demo flow
+            Payout network: {selectedProvider?.name ?? 'Mobile money network'} · Estimated network fee included in this demo
           </Text>
         )}
       </View>
@@ -563,11 +567,11 @@ function InternationalTransferForm({ onDone }: { onDone: () => void }) {
 
             <View style={styles.summaryRow}>
               <Text style={styles.summaryLabel}>Destination</Text>
-              <Text style={styles.summaryValue}>{destinationCountry}</Text>
+              <Text style={styles.summaryValue}>{destinationLabel}</Text>
             </View>
             <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>Provider</Text>
-              <Text style={styles.summaryValue}>{selectedProvider?.name ?? 'Mobile money'}</Text>
+              <Text style={styles.summaryLabel}>Payout network</Text>
+              <Text style={styles.summaryValue}>{selectedProvider?.name ?? 'Mobile money network'}</Text>
             </View>
             <View style={styles.summaryRow}>
               <Text style={styles.summaryLabel}>Recipient</Text>

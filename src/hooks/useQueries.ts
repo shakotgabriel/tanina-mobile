@@ -1,7 +1,19 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { api, ChangePasswordPayload, UpdateProfilePayload } from '@/src/lib/api/services';
-import { FxSwapQuoteRequest, FxSwapExecuteRequest, MobileMoneyDepositRequest, P2PTransferRequest, BillPayRequest, CashoutInitiateRequest, CashoutConfirmRequest, MerchantIntentRequest, UUID } from '@/src/types';
+import {
+  FxSwapQuoteRequest,
+  FxSwapExecuteRequest,
+  MobileMoneyDepositRequest,
+  P2PTransferRequest,
+  BillPayRequest,
+  CashoutInitiateRequest,
+  CashoutConfirmRequest,
+  MerchantIntentRequest,
+  UUID,
+  WithdrawalInitiateRequest,
+  WithdrawalConfirmRequest,
+} from '@/src/types';
 import { useAuthStore } from '@/src/lib/store/authStore';
 
 export const useProfileQuery = (enabled = true) => {
@@ -121,16 +133,24 @@ export const useMerchantPayMutation = () => {
 };
 
 export const useCashoutInitiateMutation = () => {
-  return useMutation({
-    mutationFn: (payload: CashoutInitiateRequest) => api.initiateCashout(payload),
-  });
+  return useWithdrawalInitiateMutation();
 };
 
 export const useCashoutConfirmMutation = () => {
+  return useWithdrawalConfirmMutation();
+};
+
+export const useWithdrawalInitiateMutation = () => {
+  return useMutation({
+    mutationFn: (payload: WithdrawalInitiateRequest | CashoutInitiateRequest) => api.initiateWithdrawal(payload),
+  });
+};
+
+export const useWithdrawalConfirmMutation = () => {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (params: { id: UUID; payload: CashoutConfirmRequest }) =>
-      api.confirmCashout(params.id, params.payload),
+    mutationFn: (params: { id: UUID; payload: WithdrawalConfirmRequest | CashoutConfirmRequest }) =>
+      api.confirmWithdrawal(params.id, params.payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['balances'] });
       queryClient.invalidateQueries({ queryKey: ['transactions'] });

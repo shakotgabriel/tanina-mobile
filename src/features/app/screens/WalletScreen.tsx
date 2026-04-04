@@ -23,11 +23,13 @@ import { useEnrichedTransactions } from '@/src/hooks/useEnrichedTransactions';
 import { formatCurrency } from '@/src/lib/utils/currency';
 import {
   isCredit,
+  statusLabel,
   statusBg,
   statusText,
   txIcon,
   txIconColor,
   txLabel,
+  txSubtitle,
 } from '@/src/lib/utils/transaction-ui';
 
 const SECONDARY_CURRENCIES = ['SSP', 'KES', 'UGX', 'RWF'];
@@ -632,7 +634,7 @@ export default function WalletScreen() {
                     {txLabel(tx.type)}
                   </Text>
                   <Text className="text-gray-400 text-xs mt-0.5" numberOfLines={1}>
-                    {tx.counterpartyLabel ?? tx.counterparty ?? (tx.counterpartyUserId ? 'Resolving user...' : undefined) ?? tx.description ?? tx.currency}
+                    {txSubtitle(tx as any)}
                   </Text>
                 </View>
                 <View className="items-end">
@@ -640,7 +642,7 @@ export default function WalletScreen() {
                     {(credit ? '+' : '-')} {formatCurrency(tx.amountMinor, tx.currency)}
                   </Text>
                   <View className={`mt-1 px-2 py-0.5 rounded-full ${statusBg(tx.status)}`}>
-                    <Text className={`text-[10px] font-semibold uppercase ${statusText(tx.status)}`}>{tx.status}</Text>
+                    <Text className={`text-[10px] font-semibold uppercase ${statusText(tx.status)}`}>{statusLabel(tx.status)}</Text>
                   </View>
                 </View>
               </View>

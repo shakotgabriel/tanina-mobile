@@ -301,6 +301,11 @@ export type CashoutConfirmRequest = {
   confirmationCode: string;
 };
 
+// Withdrawal naming aliases kept for product language consistency on the frontend.
+export type WithdrawalInitiateRequest = CashoutInitiateRequest;
+export type WithdrawalDTO = CashoutDTO;
+export type WithdrawalConfirmRequest = CashoutConfirmRequest;
+
 export type MerchantIntentRequest = {
   merchantId: UUID;
   amountMinor: number;

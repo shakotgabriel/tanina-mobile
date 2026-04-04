@@ -19,6 +19,9 @@ import {
   txIcon,
   txIconColor,
   txLabel,
+  directionLabel,
+  statusLabel,
+  txSubtitle,
 } from '@/src/lib/utils/transaction-ui';
 import { EmptyState, Skeleton } from '@/src/components/common';
 
@@ -123,12 +126,12 @@ function TransactionDetailModal({ tx, onClose }: { tx: Tx | null; onClose: () =>
               {credit ? '+' : '−'} {formatCurrency(tx.amountMinor, tx.currency)}
             </Text>
             <View className={`mt-2 px-3 py-1 rounded-full ${statusBg(tx.status)}`}>
-              <Text className={`text-xs font-semibold uppercase ${statusText(tx.status)}`}>{tx.status}</Text>
+              <Text className={`text-xs font-semibold uppercase ${statusText(tx.status)}`}>{statusLabel(tx.status)}</Text>
             </View>
           </View>
 
           {/* Detail rows */}
-          <DetailRow label="Direction" value={tx.direction ?? (credit ? 'CREDIT' : 'DEBIT')} />
+          <DetailRow label="Direction" value={directionLabel(tx.direction ?? (credit ? 'CREDIT' : 'DEBIT'))} />
           <DetailRow label="Currency" value={tx.currency} />
           {tx.description && <DetailRow label="Description" value={tx.description} />}
           {!!counterpartyValue && <DetailRow label="Counterparty" value={counterpartyValue} />}
@@ -137,7 +140,7 @@ function TransactionDetailModal({ tx, onClose }: { tx: Tx | null; onClose: () =>
           {txTime(tx) && (
             <DetailRow label="Date" value={new Date(txTime(tx)!).toLocaleString()} />
           )}
-          <DetailRow label="ID" value={tx.id} mono />
+          <DetailRow label="Transaction ID" value={tx.id} mono />
         </View>
       </View>
     </Modal>
@@ -179,12 +182,7 @@ function FilterChips({
 function TransactionItem({ tx, onPress }: { tx: Tx; onPress: () => void }) {
   const credit = isCredit(tx);
   const color = txIconColor(tx.type, tx.direction);
-  const subtitle =
-    tx.counterpartyLabel ??
-    tx.counterparty ??
-    (tx.counterpartyUserId ? 'Resolving user...' : undefined) ??
-    tx.description ??
-    tx.currency;
+  const subtitle = txSubtitle(tx);
   return (
     <TouchableOpacity
       onPress={onPress}
@@ -205,7 +203,7 @@ function TransactionItem({ tx, onPress }: { tx: Tx; onPress: () => void }) {
           {credit ? '+' : '−'}{formatCurrency(tx.amountMinor, tx.currency)}
         </Text>
         <View className={`mt-1 px-2 py-0.5 rounded-full ${statusBg(tx.status)}`}>
-          <Text className={`text-[10px] font-semibold uppercase ${statusText(tx.status)}`}>{tx.status}</Text>
+          <Text className={`text-[10px] font-semibold uppercase ${statusText(tx.status)}`}>{statusLabel(tx.status)}</Text>
         </View>
       </View>
       <Ionicons name="chevron-forward" size={14} color="#9CA3AF" style={{ marginLeft: 8 }} />

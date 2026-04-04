@@ -195,6 +195,28 @@ const resolveMerchantUserId = async (merchantIdentifier: string): Promise<string
   throw new Error('Merchant ID must be a UUID or 6-digit merchant code');
 };
 
+const resolveAgentUserId = async (agentIdentifier: string): Promise<string> => {
+  const normalized = agentIdentifier.trim();
+  if (!normalized) {
+    throw new Error('Withdrawal agent ID is required');
+  }
+
+  if (!UUID_REGEX.test(normalized)) {
+    throw new Error('Withdrawal agent ID must be a UUID');
+  }
+
+  const response = await apiClient.get<UserDTO | ApiResponse<UserDTO>>(ENDPOINTS.users.byId(normalized));
+  const agentUser = unwrapApiData(response.data);
+  if (!agentUser?.userId) {
+    throw new Error('Agent account not found');
+  }
+  if ((agentUser.accountType ?? '').toUpperCase() !== 'AGENT') {
+    throw new Error('Selected account is not an AGENT');
+  }
+
+  return agentUser.userId;
+};
+
 const getCurrentUserId = async (): Promise<string> => {
   const tokenUserId = decodeUserIdFromAccessToken();
   if (tokenUserId) {
@@ -463,9 +485,11 @@ export const api = {
 
   initiateCashout: async (payload: CashoutInitiateRequest) => {
     const userId = await getCurrentUserId();
+    const agentIdentifier = String((payload as any).agentUserId ?? (payload as any).agentId ?? '').trim();
+    const agentUserId = await resolveAgentUserId(agentIdentifier);
     const response = await apiClient.post<CashoutDTO>(ENDPOINTS.cashout.initiate, {
       userId,
-      agentUserId: (payload as any).agentUserId ?? (payload as any).agentId,
+      agentUserId,
       amountMinor: payload.amountMinor,
       currency: payload.currency,
     });
@@ -490,6 +514,26 @@ export const api = {
   getCashoutsByAgentUserId: async (agentUserId: UUID) => {
     const response = await apiClient.get<CashoutDTO[]>(ENDPOINTS.cashout.byAgentUserId(agentUserId));
     return response.data;
+  },
+
+  // Frontend alias: product language uses "withdrawal" while backend routes remain /cashout.
+  initiateWithdrawal: async (payload: CashoutInitiateRequest) => {
+    return api.initiateCashout(payload);
+  },
+  confirmWithdrawal: async (id: UUID, payload: CashoutConfirmRequest) => {
+    return api.confirmCashout(id, payload);
+  },
+  cancelWithdrawal: async (id: UUID) => {
+    return api.cancelCashout(id);
+  },
+  getWithdrawalById: async (id: UUID) => {
+    return api.getCashoutById(id);
+  },
+  getWithdrawalsByUserId: async (userId: UUID) => {
+    return api.getCashoutsByUserId(userId);
+  },
+  getWithdrawalsByAgentUserId: async (agentUserId: UUID) => {
+    return api.getCashoutsByAgentUserId(agentUserId);
   },
 
   createMerchantIntent: async (payload: MerchantIntentRequest) => {
