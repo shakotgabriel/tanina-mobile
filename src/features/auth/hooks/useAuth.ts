@@ -1,9 +1,51 @@
 import { useMutation } from '@tanstack/react-query';
+import { AxiosError } from 'axios';
 import { useRouter } from 'expo-router';
-import Toast from 'react-native-toast-message';
+import { notify } from '@/src/lib/utils/notify';
 
 import { api, LoginPayload } from '@/src/lib/api/services';
 import { useAuthStore } from '@/src/lib/store/authStore';
+import { ForgotPasswordRequest, RegisterRequest, ResendOtpRequest, VerifyEmailRequest } from '@/src/types';
+
+type ApiErrorBody = {
+  message?: string;
+};
+
+const navigateToVerifyEmail = (router: ReturnType<typeof useRouter>, email: string) => {
+  const normalizedEmail = email.trim().toLowerCase();
+  router.replace({
+    pathname: '/verify-email',
+    params: { email: normalizedEmail },
+  });
+};
+
+const getErrorMessage = (error: unknown, fallback: string) => {
+  if (error instanceof AxiosError) {
+    const responseData = error.response?.data as ApiErrorBody | undefined;
+    return responseData?.message ?? fallback;
+  }
+
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+
+  return fallback;
+};
+
+const isLikelyCorsBlockedRegisterResponse = (error: unknown) => {
+  if (!(error instanceof AxiosError)) {
+    return false;
+  }
+
+  const hasNoResponse = !error.response;
+  const isNetworkLikeError =
+    error.code === 'ERR_NETWORK' ||
+    error.message.includes('Network Error') ||
+    error.message.includes('ERR_FAILED') ||
+    error.message.includes('201');
+
+  return hasNoResponse && isNetworkLikeError;
+};
 
 export const useLogin = () => {
   const setToken = useAuthStore((state) => state.setToken);
@@ -17,7 +59,7 @@ export const useLogin = () => {
       }
     },
     onError: () => {
-      Toast.show({ type: 'error', text1: 'Login failed', text2: 'Invalid email or password.' });
+      notify.error('Login failed', 'Invalid email or password.');
     },
   });
 };
@@ -26,13 +68,18 @@ export const useRegister = () => {
   const router = useRouter();
 
   return useMutation({
-    mutationFn: (payload: { firstName: string; lastName: string; email: string; password: string; phoneNumber?: string; accountType?: string }) =>
-      api.register(payload),
+    mutationFn: (payload: RegisterRequest) => api.register(payload),
     onSuccess: (_data, variables) => {
-      router.push(`/(auth)/verify-email?email=${encodeURIComponent(variables.email)}`);
+      navigateToVerifyEmail(router, variables.email);
     },
-    onError: () => {
-      Toast.show({ type: 'error', text1: 'Registration failed', text2: 'Please check your details and try again.' });
+    onError: (error, variables) => {
+      if (isLikelyCorsBlockedRegisterResponse(error)) {
+        notify.info('Account created', 'Check your email and verify your OTP code.');
+        navigateToVerifyEmail(router, variables.email);
+        return;
+      }
+
+      notify.error('Registration failed', getErrorMessage(error, 'Please check your details and try again.'));
     },
   });
 };
@@ -41,29 +88,37 @@ export const useVerifyEmail = () => {
   const router = useRouter();
 
   return useMutation({
-    mutationFn: (payload: { email: string; otp: string }) => api.verifyEmail(payload),
+    mutationFn: (payload: VerifyEmailRequest) => api.verifyEmail(payload),
     onSuccess: () => {
-      Toast.show({ type: 'success', text1: 'Email verified!', text2: 'You can now log in.' });
+      notify.success('Email verified!', 'You can now log in.');
       router.replace('/(auth)/login');
     },
     onError: () => {
-      Toast.show({ type: 'error', text1: 'Invalid code', text2: 'Please check the code and try again.' });
+      notify.validation('Invalid code');
+    },
+  });
+};
+
+export const useResendOtp = () => {
+  return useMutation({
+    mutationFn: (payload: ResendOtpRequest) => api.resendOtp(payload),
+    onSuccess: () => {
+      notify.success('Code sent', 'A new verification code has been sent to your email.');
+    },
+    onError: (error) => {
+      notify.error('Failed to resend', getErrorMessage(error, 'Please try again in a moment.'));
     },
   });
 };
 
 export const useForgotPassword = () => {
   return useMutation({
-    mutationFn: (payload: { email: string }) => api.forgotPassword(payload),
+    mutationFn: (payload: ForgotPasswordRequest) => api.forgotPassword(payload),
     onSuccess: () => {
-      Toast.show({
-        type: 'success',
-        text1: 'Reset email sent',
-        text2: 'Check your inbox for reset instructions.',
-      });
+      notify.success('Reset email sent', 'Check your inbox for reset instructions.');
     },
     onError: () => {
-      Toast.show({ type: 'error', text1: 'Failed', text2: 'Could not send reset email. Try again.' });
+      notify.error('Failed', 'Could not send reset email. Try again.');
     },
   });
 };

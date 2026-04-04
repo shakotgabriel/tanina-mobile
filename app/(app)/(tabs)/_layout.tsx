@@ -7,10 +7,12 @@ import { useProfileQuery } from '@/src/hooks/useQueries';
 type HeaderProps = {
   user: {
     name: string;
+    email?: string;
   };
+  isLoading: boolean;
 };
 
-function Header({ user }: HeaderProps) {
+function Header({ user, isLoading }: HeaderProps) {
   const insets = useSafeAreaInsets();
   const initials = user.name
     .split(' ')
@@ -32,10 +34,7 @@ function Header({ user }: HeaderProps) {
         paddingBottom: 12,
         paddingHorizontal: 20,
         elevation: 2,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.06,
-        shadowRadius: 4,
+        boxShadow: '0px 1px 4px rgba(0, 0, 0, 0.06)',
       }}
     >
       {/* Logo */}
@@ -58,11 +57,17 @@ function Header({ user }: HeaderProps) {
           paddingLeft: 12,
           paddingRight: 4,
           paddingVertical: 4,
+          opacity: isLoading ? 0.6 : 1,
         }}
       >
         <View style={{ alignItems: 'flex-end' }}>
           <Text style={{ fontSize: 10, color: '#9CA3AF', fontWeight: '500', letterSpacing: 0.5, textTransform: 'uppercase' }}>Welcome</Text>
           <Text style={{ fontSize: 13, fontWeight: '600', color: '#111827', lineHeight: 17 }}>{user.name}</Text>
+          {user.email && (
+            <Text style={{ fontSize: 9, color: '#9CA3AF', fontWeight: '400', lineHeight: 12, marginTop: 2 }}>
+              {user.email}
+            </Text>
+          )}
         </View>
         <View
           style={{
@@ -82,14 +87,20 @@ function Header({ user }: HeaderProps) {
 }
 
 export default function TabsLayout() {
-  const { data: profile } = useProfileQuery();
-  const firstName = (profile as any)?.firstName ?? 'Me';
-  const user = { name: firstName };
+  const { data: profile, isLoading } = useProfileQuery(true); // Always enable in header to display user info
+  
+  const firstName = (profile as any)?.firstName ?? '';
+  const lastName = (profile as any)?.lastName ?? '';
+  const email = (profile as any)?.email ?? '';
+  
+  const fallbackName = email ? email.split('@')[0] : 'User';
+  const fullName = `${firstName}${lastName ? ` ${lastName}` : ''}`.trim() || fallbackName;
+  const user = { name: fullName, email };
 
   return (
     <Tabs
       screenOptions={{
-        header: () => <Header user={user} />,
+        header: () => <Header user={user} isLoading={isLoading} />,
         tabBarActiveTintColor: '#2F6B2F',
         tabBarInactiveTintColor: '#9CA3AF',
         tabBarStyle: {
@@ -100,10 +111,7 @@ export default function TabsLayout() {
           paddingBottom: 40,
           paddingTop: 6,
           elevation: 8,
-          shadowColor: '#000',
-          shadowOffset: { width: 0, height: -2 },
-          shadowOpacity: 0.05,
-          shadowRadius: 8,
+          boxShadow: '0px -2px 8px rgba(0, 0, 0, 0.05)',
         },
         tabBarLabelStyle: {
           fontSize: 11,

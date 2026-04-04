@@ -30,6 +30,11 @@ export default function ActionScreen({
 }: ActionScreenProps) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const contentWrapperStyle = {
+    width: '100%' as const,
+    maxWidth: 520,
+    alignSelf: 'center' as const,
+  };
 
   function handleBack() {
     if (onBack) {
@@ -51,10 +56,7 @@ export default function ActionScreen({
           borderBottomWidth: 1,
           borderBottomColor: '#F3F4F6',
           elevation: 2,
-          shadowColor: '#000',
-          shadowOffset: { width: 0, height: 1 },
-          shadowOpacity: 0.06,
-          shadowRadius: 4,
+          boxShadow: '0px 1px 4px rgba(0, 0, 0, 0.06)',
         }}
       >
         <View
@@ -100,14 +102,16 @@ export default function ActionScreen({
       {scrollable ? (
         <ScrollView
           style={{ flex: 1 }}
-          contentContainerStyle={{ padding: 16, paddingBottom: 32 }}
+          contentContainerStyle={{ padding: 16, paddingBottom: 32, flexGrow: 1 }}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-          {children}
+          <View style={contentWrapperStyle}>{children}</View>
         </ScrollView>
       ) : (
-        <View style={{ flex: 1, padding: 16 }}>{children}</View>
+        <View style={{ flex: 1, padding: 16 }}>
+          <View style={contentWrapperStyle}>{children}</View>
+        </View>
       )}
 
       {/* ── Tab Bar Footer ─────────────────────────────── */}
@@ -119,10 +123,7 @@ export default function ActionScreen({
           borderTopColor: '#F3F4F6',
           paddingBottom: Math.max(insets.bottom, 8),
           elevation: 8,
-          shadowColor: '#000',
-          shadowOffset: { width: 0, height: -2 },
-          shadowOpacity: 0.05,
-          shadowRadius: 8,
+          boxShadow: '0px -2px 8px rgba(0, 0, 0, 0.05)',
         }}
       >
         {TABS.map((tab) => (

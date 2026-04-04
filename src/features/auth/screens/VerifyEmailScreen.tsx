@@ -1,5 +1,5 @@
 import { useLocalSearchParams, Link } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -12,14 +12,31 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
-import { useVerifyEmail } from '@/src/features/auth/hooks/useAuth';
+import { useResendOtp, useVerifyEmail } from '@/src/features/auth/hooks/useAuth';
 
 export default function VerifyEmailScreen() {
   const verify = useVerifyEmail();
-  const { email = '' } = useLocalSearchParams<{ email: string }>();
+  const resendOtp = useResendOtp();
+  const { email = '' } = useLocalSearchParams<{ email?: string | string[] }>();
+  const normalizedEmail = Array.isArray(email) ? (email[0] ?? '') : email;
   const [otp, setOtp] = useState('');
+  const [resendCooldown, setResendCooldown] = useState(0);
 
   const isComplete = otp.length === 6;
+
+  useEffect(() => {
+    if (resendCooldown <= 0) {
+      return;
+    }
+
+    const timer = setInterval(() => {
+      setResendCooldown((value) => (value > 0 ? value - 1 : 0));
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [resendCooldown]);
+
+  const canResend = !resendOtp.isPending && !!normalizedEmail && resendCooldown === 0;
 
   return (
     <SafeAreaView style={styles.root} edges={['top']}>
@@ -37,7 +54,7 @@ export default function VerifyEmailScreen() {
           <View style={styles.emailBadge}>
             <Ionicons name="mail-outline" size={13} color="#2F6B2F" style={{ marginRight: 5 }} />
             <Text style={styles.emailBadgeText} numberOfLines={1}>
-              {email || 'your email address'}
+              {normalizedEmail || 'your email address'}
             </Text>
           </View>
         </View>
@@ -78,8 +95,8 @@ export default function VerifyEmailScreen() {
               styles.button,
               (!isComplete || verify.isPending) && styles.buttonDisabled,
             ]}
-            onPress={() => verify.mutate({ email, otp })}
-            disabled={!isComplete || verify.isPending}
+            onPress={() => verify.mutate({ email: normalizedEmail, otp })}
+            disabled={!isComplete || verify.isPending || !normalizedEmail}
             activeOpacity={0.85}
           >
             <Text style={styles.buttonText}>
@@ -89,8 +106,21 @@ export default function VerifyEmailScreen() {
 
           <View style={styles.footer}>
             <Text style={styles.footerText}>{"Didn't receive the code?"}</Text>
-            <TouchableOpacity hitSlop={8}>
-              <Text style={styles.resendText}>Resend code</Text>
+            <TouchableOpacity
+              hitSlop={8}
+              onPress={() => {
+                resendOtp.mutate({ email: normalizedEmail });
+                setResendCooldown(30);
+              }}
+              disabled={!canResend}
+            >
+              <Text style={[styles.resendText, !canResend && styles.resendTextDisabled]}>
+                {resendOtp.isPending
+                  ? 'Sending...'
+                  : resendCooldown > 0
+                    ? `Resend in ${resendCooldown}s`
+                    : 'Resend code'}
+              </Text>
             </TouchableOpacity>
           </View>
 
@@ -202,10 +232,7 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     alignItems: 'center',
     marginBottom: 20,
-    shadowColor: '#2F6B2F',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
+    boxShadow: '0px 4px 8px rgba(47, 107, 47, 0.25)',
     elevation: 4,
   },
   buttonDisabled: { opacity: 0.45 },
@@ -219,6 +246,7 @@ const styles = StyleSheet.create({
   },
   footerText: { fontSize: 13, color: '#6B7280' },
   resendText: { fontSize: 13, color: '#2F6B2F', fontWeight: '700' },
+  resendTextDisabled: { opacity: 0.45 },
   backLink: {
     color: '#9CA3AF',
     fontSize: 13,

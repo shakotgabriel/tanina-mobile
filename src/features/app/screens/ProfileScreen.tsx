@@ -2,6 +2,7 @@ import { useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Platform,
   Text,
   TextInput,
   TextInputProps,
@@ -9,6 +10,8 @@ import {
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
+import { notify } from '@/src/lib/utils/notify';
 
 import Screen from '@/src/components/layout/Screen';
 import {
@@ -88,6 +91,7 @@ function SectionCard({
   icon,
   editing,
   saving,
+  saveDisabled,
   onEdit,
   onCancel,
   onSave,
@@ -97,6 +101,7 @@ function SectionCard({
   icon: React.ComponentProps<typeof Ionicons>['name'];
   editing: boolean;
   saving: boolean;
+  saveDisabled?: boolean;
   onEdit: () => void;
   onCancel: () => void;
   onSave: () => void;
@@ -119,8 +124,8 @@ function SectionCard({
             </TouchableOpacity>
             <TouchableOpacity
               onPress={onSave}
-              disabled={saving}
-              className="flex-row items-center gap-1 px-3 py-1.5 rounded-lg bg-[#2F6B2F]"
+              disabled={saving || saveDisabled}
+              className={`flex-row items-center gap-1 px-3 py-1.5 rounded-lg ${(saving || saveDisabled) ? 'bg-[#2F6B2F]/50' : 'bg-[#2F6B2F]'}`}
             >
               {saving
                 ? <ActivityIndicator size={12} color="#fff" />
@@ -149,7 +154,8 @@ function SectionCard({
 // ─── Screen ────────────────────────────────────────────────────────────────────
 
 export default function ProfileScreen() {
-  const { data } = useProfileQuery();
+  const router = useRouter();
+  const { data, isLoading } = useProfileQuery(true); // Enable query when viewing profile
   const profile = data as unknown as UserDTO;
   const clearAuth = useAuthStore((state) => state.clearAuth);
   const updateProfile = useUpdateProfileMutation();
@@ -175,6 +181,29 @@ export default function ProfileScreen() {
 
   const kyc = kycBadge(profile?.kycStatus);
 
+  const normalizedProfileFirstName = (profile?.firstName ?? '').trim();
+  const normalizedProfileLastName = (profile?.lastName ?? '').trim();
+  const normalizedProfilePhone = (profile?.phoneNumber ?? '').trim();
+  const normalizedProfileEmail = (profile?.email ?? '').trim().toLowerCase();
+
+  const normalizedFirstName = firstName.trim();
+  const normalizedLastName = lastName.trim();
+  const normalizedPhone = phone.trim();
+  const normalizedEmail = email.trim().toLowerCase();
+
+  const hasPersonalChanges =
+    normalizedFirstName !== normalizedProfileFirstName ||
+    normalizedLastName !== normalizedProfileLastName ||
+    normalizedPhone !== normalizedProfilePhone;
+
+  const hasEmailChanges = normalizedEmail !== normalizedProfileEmail;
+
+  const canSavePassword =
+    currentPassword.trim().length > 0 &&
+    newPassword.trim().length >= 8 &&
+    confirmPassword.trim().length > 0 &&
+    newPassword === confirmPassword;
+
   function openSection(section: EditSection) {
     if (section === 'personal') {
       setFirstName(profile?.firstName ?? '');
@@ -194,40 +223,61 @@ export default function ProfileScreen() {
   }
 
   function savePersonal() {
+    if (!hasPersonalChanges) {
+      setEditSection(null);
+      return;
+    }
+
     updateProfile.mutate(
-      { firstName, lastName, phoneNumber: phone },
+      { firstName: normalizedFirstName, lastName: normalizedLastName, phoneNumber: normalizedPhone || undefined },
       {
-        onSuccess: () => setEditSection(null),
-        onError: () => Alert.alert('Error', 'Could not update profile. Please try again.'),
+        onSuccess: () => {
+          setEditSection(null);
+          notify.success('Profile updated');
+        },
+        onError: () => {
+          notify.error('Update failed', 'Could not update profile. Please try again.');
+        },
       }
     );
   }
 
   function saveEmail() {
-    if (!email.includes('@')) {
-      Alert.alert('Invalid', 'Please enter a valid email address.');
+    if (!normalizedEmail.includes('@')) {
+      notify.validation('Invalid email');
       return;
     }
+
+    if (!hasEmailChanges) {
+      setEditSection(null);
+      return;
+    }
+
     updateProfile.mutate(
-      { email },
+      { email: normalizedEmail },
       {
-        onSuccess: () => setEditSection(null),
-        onError: () => Alert.alert('Error', 'Could not update email. Please try again.'),
+        onSuccess: () => {
+          setEditSection(null);
+          notify.success('Email updated');
+        },
+        onError: () => {
+          notify.error('Update failed', 'Could not update email. Please try again.');
+        },
       }
     );
   }
 
   function savePassword() {
     if (!currentPassword || !newPassword || !confirmPassword) {
-      Alert.alert('Required', 'Please fill in all password fields.');
+      notify.validation('Missing fields');
       return;
     }
     if (newPassword !== confirmPassword) {
-      Alert.alert('Mismatch', 'New passwords do not match.');
+      notify.validation('Password mismatch');
       return;
     }
     if (newPassword.length < 8) {
-      Alert.alert('Too short', 'New password must be at least 8 characters.');
+      notify.validation('Password too short');
       return;
     }
     changePassword.mutate(
@@ -235,23 +285,44 @@ export default function ProfileScreen() {
       {
         onSuccess: () => {
           setEditSection(null);
-          Alert.alert('Success', 'Password changed successfully.');
+          notify.success('Password updated');
         },
-        onError: () =>
-          Alert.alert('Error', 'Could not change password. Check your current password.'),
+        onError: () => {
+          notify.error('Update failed', 'Could not change password. Check your current password.');
+        },
       }
     );
   }
 
+  async function performLogout() {
+    await clearAuth();
+    router.replace('/(auth)/login');
+  }
+
   function confirmLogout() {
+    if (Platform.OS === 'web') {
+      const accepted = globalThis.confirm('Are you sure you want to logout?');
+      if (accepted) {
+        void performLogout();
+      }
+      return;
+    }
+
     Alert.alert('Logout', 'Are you sure you want to logout?', [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Logout', style: 'destructive', onPress: () => clearAuth() },
+      { text: 'Logout', style: 'destructive', onPress: () => void performLogout() },
     ]);
   }
 
   return (
     <Screen scrollable>
+      {isLoading ? (
+        <View className="flex-1 items-center justify-center py-12">
+          <ActivityIndicator size="large" color="#2F6B2F" />
+          <Text className="text-gray-500 text-sm mt-3">Loading your profile...</Text>
+        </View>
+      ) : (
+        <>
       {/* ── Avatar header card ─────────────────────────────── */}
       <View className="bg-[#2F6B2F] rounded-2xl p-5 mb-5 items-center">
         <View
@@ -303,6 +374,7 @@ export default function ProfileScreen() {
         icon="person-outline"
         editing={editSection === 'personal'}
         saving={updateProfile.isPending}
+        saveDisabled={!hasPersonalChanges}
         onEdit={() => openSection('personal')}
         onCancel={() => setEditSection(null)}
         onSave={savePersonal}
@@ -344,6 +416,7 @@ export default function ProfileScreen() {
         icon="mail-outline"
         editing={editSection === 'email'}
         saving={updateProfile.isPending}
+        saveDisabled={!hasEmailChanges}
         onEdit={() => openSection('email')}
         onCancel={() => setEditSection(null)}
         onSave={saveEmail}
@@ -368,6 +441,7 @@ export default function ProfileScreen() {
         icon="lock-closed-outline"
         editing={editSection === 'password'}
         saving={changePassword.isPending}
+        saveDisabled={!canSavePassword}
         onEdit={() => openSection('password')}
         onCancel={() => setEditSection(null)}
         onSave={savePassword}
@@ -398,6 +472,9 @@ export default function ProfileScreen() {
               show={showConfirm}
               onToggle={() => setShowConfirm((v) => !v)}
             />
+            <Text className="text-gray-500 text-xs">
+              Password must be at least 8 characters and match confirmation.
+            </Text>
           </View>
         ) : (
           <InfoRow label="Password" value="••••••••" />
@@ -435,6 +512,8 @@ export default function ProfileScreen() {
         <Ionicons name="log-out-outline" size={20} color="#EF4444" />
         <Text className="text-red-500 font-semibold text-base">Logout</Text>
       </TouchableOpacity>
+        </>
+      )}
     </Screen>
   );
 }

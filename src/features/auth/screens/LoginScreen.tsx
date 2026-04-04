@@ -22,6 +22,9 @@ export default function LoginScreen() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 
+  const normalizedEmail = email.trim().toLowerCase();
+  const canSubmit = normalizedEmail.length > 0 && password.trim().length > 0 && !login.isPending;
+
   return (
     <SafeAreaView style={styles.root} edges={['top']}>
       <KeyboardAvoidingView
@@ -59,6 +62,7 @@ export default function LoginScreen() {
               keyboardType="email-address"
               autoCapitalize="none"
               autoComplete="email"
+              autoCorrect={false}
             />
           </View>
 
@@ -88,9 +92,9 @@ export default function LoginScreen() {
           </Link>
 
           <TouchableOpacity
-            style={[styles.button, login.isPending && styles.buttonDisabled]}
-            onPress={() => login.mutate({ email, password })}
-            disabled={login.isPending}
+            style={[styles.button, !canSubmit && styles.buttonDisabled]}
+            onPress={() => login.mutate({ email: normalizedEmail, password: password.trim() })}
+            disabled={!canSubmit}
             activeOpacity={0.85}
           >
             <Text style={styles.buttonText}>
@@ -172,10 +176,7 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     alignItems: 'center',
     marginBottom: 24,
-    shadowColor: '#2F6B2F',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
+    boxShadow: '0px 4px 8px rgba(47, 107, 47, 0.25)',
     elevation: 4,
   },
   buttonDisabled: { opacity: 0.65 },
