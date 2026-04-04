@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Modal,
@@ -16,6 +16,7 @@ import { notify } from '@/src/lib/utils/notify';
 import ActionScreen from '@/src/components/layout/ActionScreen';
 import { MOBILE_MONEY_PROVIDERS, SUPPORTED_COUNTRIES } from '@/src/features/app/components/CountryPicker';
 import MethodSelector, { Method } from '@/src/features/app/components/MethodSelector';
+import { useFormValidation } from '@/src/hooks/useFormValidation';
 import { useFxQuoteMutation, useLookupUserMutation, useSendP2PMutation } from '@/src/hooks/useQueries';
 import { UserDTO } from '@/src/types';
 import { formatCurrency } from '@/src/lib/utils/currency';
@@ -94,8 +95,28 @@ function P2PSendForm({ onDone }: { onDone: () => void }) {
   const [confirmVisible, setConfirmVisible] = useState(false);
   const [done, setDone] = useState(false);
 
+  const formValues = useMemo(() => ({ email, amount }), [email, amount]);
+  const { errors, validateField, validateAll, touchField } = useFormValidation(
+    {
+      email: (value) => {
+        const next = String(value).trim();
+        return /\S+@\S+\.\S+/.test(next) ? null : 'Enter a valid email address';
+      },
+      amount: (value) => {
+        const parsed = Number(value);
+        return Number.isFinite(parsed) && parsed > 0 ? null : 'Amount must be greater than 0';
+      },
+    },
+    formValues
+  );
+
   async function handleLookup() {
-    if (!email.trim()) return;
+    const hasEmail = !validateField('email', email);
+    if (!hasEmail) {
+      notify.validation('Invalid email');
+      return;
+    }
+
     lookup.mutate(email.trim(), {
       onSuccess: (user) => setRecipient(user as UserDTO),
       onError: () => {
@@ -107,8 +128,7 @@ function P2PSendForm({ onDone }: { onDone: () => void }) {
 
   function handleReview() {
     if (!recipient) return;
-    const num = parseFloat(amount);
-    if (!num || num <= 0) {
+    if (!validateAll()) {
       notify.validation('Invalid amount');
       return;
     }
@@ -160,7 +180,12 @@ function P2PSendForm({ onDone }: { onDone: () => void }) {
           placeholder="e.g. john@example.com"
           placeholderTextColor="#9CA3AF"
           value={email}
-          onChangeText={(v) => { setEmail(v); setRecipient(null); }}
+          onChangeText={(v) => {
+            setEmail(v);
+            setRecipient(null);
+            touchField('email');
+            validateField('email', v);
+          }}
           keyboardType="email-address"
           autoCapitalize="none"
           editable={!lookup.isPending}
@@ -177,6 +202,8 @@ function P2PSendForm({ onDone }: { onDone: () => void }) {
           }
         </TouchableOpacity>
       </View>
+      {errors.email ? <Text style={styles.inlineError}>{errors.email}</Text> : null}
+      {lookup.isPending ? <Text style={styles.asyncHint}>Looking up recipient...</Text> : null}
 
       {/* ── Recipient card ─────────────────────── */}
       {recipient && (
@@ -233,10 +260,15 @@ function P2PSendForm({ onDone }: { onDone: () => void }) {
               placeholder="0.00"
               placeholderTextColor="#9CA3AF"
               value={amount}
-              onChangeText={setAmount}
+              onChangeText={(value) => {
+                setAmount(value);
+                touchField('amount');
+                validateField('amount', value);
+              }}
               keyboardType="decimal-pad"
             />
           </View>
+          {errors.amount ? <Text style={styles.inlineError}>{errors.amount}</Text> : null}
 
           {/* ── Note ─────────────────────────────── */}
           <Text style={[styles.label, { marginTop: 18 }]}>Note <Text style={styles.optional}>(optional)</Text></Text>
@@ -320,6 +352,23 @@ function InternationalTransferForm({ onDone }: { onDone: () => void }) {
   const [showSummary, setShowSummary] = useState(false);
   const [done, setDone] = useState(false);
 
+  const intlFormValues = useMemo(() => ({ mobileNumber, amount }), [mobileNumber, amount]);
+  const {
+    errors: intlErrors,
+    validateField: validateIntlField,
+    validateAll: validateIntlAll,
+    touchField: touchIntlField,
+  } = useFormValidation(
+    {
+      mobileNumber: (value) => (String(value).trim().length >= 8 ? null : 'Enter a valid mobile number'),
+      amount: (value) => {
+        const parsed = Number(value);
+        return Number.isFinite(parsed) && parsed > 0 ? null : 'Amount must be greater than 0';
+      },
+    },
+    intlFormValues
+  );
+
   const destinationCurrency = COUNTRY_TO_CURRENCY[destinationCountry] ?? 'KES';
   const providers = MOBILE_MONEY_PROVIDERS[destinationCountry as keyof typeof MOBILE_MONEY_PROVIDERS] ?? [];
   const selectedProvider = providers.find((provider) => provider.id === providerId) ?? providers[0];
@@ -332,8 +381,8 @@ function InternationalTransferForm({ onDone }: { onDone: () => void }) {
   }
 
   function handleQuote() {
-    if (!Number.isFinite(Number(amount)) || Number(amount) <= 0) {
-      notify.validation('Invalid amount');
+    if (!validateIntlAll()) {
+      notify.validation('Missing fields');
       return;
     }
 
@@ -450,11 +499,14 @@ function InternationalTransferForm({ onDone }: { onDone: () => void }) {
         value={mobileNumber}
         onChangeText={(value) => {
           setMobileNumber(value);
+          touchIntlField('mobileNumber');
+          validateIntlField('mobileNumber', value);
           resetQuote();
         }}
         keyboardType="phone-pad"
         autoCapitalize="none"
       />
+      {intlErrors.mobileNumber ? <Text style={styles.inlineError}>{intlErrors.mobileNumber}</Text> : null}
 
       <Text style={styles.label}>Amount</Text>
       <View style={styles.amountRow}>
@@ -466,11 +518,14 @@ function InternationalTransferForm({ onDone }: { onDone: () => void }) {
           value={amount}
           onChangeText={(value) => {
             setAmount(value);
+            touchIntlField('amount');
+            validateIntlField('amount', value);
             resetQuote();
           }}
           keyboardType="decimal-pad"
         />
       </View>
+      {intlErrors.amount ? <Text style={styles.inlineError}>{intlErrors.amount}</Text> : null}
 
       <View style={{ backgroundColor: '#F0F7F0', borderWidth: 1, borderColor: '#2F6B2F1A', borderRadius: 16, padding: 14, marginTop: 8, marginBottom: 18 }}>
         <Text style={{ fontSize: 12, color: '#6B7280', marginBottom: 4 }}>Transfer preview</Text>
@@ -499,6 +554,7 @@ function InternationalTransferForm({ onDone }: { onDone: () => void }) {
             </>
           )}
       </TouchableOpacity>
+          {fxQuote.isPending ? <Text style={styles.asyncHint}>Fetching latest FX quote...</Text> : null}
 
       <Modal visible={showSummary} transparent animationType="slide">
         <View style={styles.overlay}>
@@ -603,6 +659,8 @@ const styles = StyleSheet.create({
     minWidth: 72,
   },
   findBtnText: { color: '#FFFFFF', fontWeight: '700', fontSize: 14 },
+  inlineError: { color: '#B91C1C', fontSize: 12, marginTop: -10, marginBottom: 10 },
+  asyncHint: { color: '#475569', fontSize: 12, marginTop: -8, marginBottom: 12 },
   recipientCard: {
     flexDirection: 'row',
     alignItems: 'center',

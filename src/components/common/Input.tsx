@@ -3,9 +3,10 @@ import { StyleSheet, Text, TextInput, TextInputProps, View } from 'react-native'
 
 interface InputProps extends TextInputProps {
   label?: string;
+  error?: string;
 }
 
-const Input = forwardRef<TextInput, InputProps>(({ label, onFocus, onBlur, ...props }, ref) => {
+const Input = forwardRef<TextInput, InputProps>(({ label, error, onFocus, onBlur, ...props }, ref) => {
   const [focused, setFocused] = useState(false);
 
   return (
@@ -13,12 +14,13 @@ const Input = forwardRef<TextInput, InputProps>(({ label, onFocus, onBlur, ...pr
       {label ? <Text style={styles.label}>{label}</Text> : null}
       <TextInput
         ref={ref}
-        style={[styles.input, focused && styles.inputFocused]}
+        style={[styles.input, focused && styles.inputFocused, error && styles.inputError]}
         placeholderTextColor="#94A3B8"
         onFocus={(e) => { setFocused(true); onFocus?.(e); }}
         onBlur={(e) => { setFocused(false); onBlur?.(e); }}
         {...props}
       />
+      {error ? <Text style={styles.errorText}>{error}</Text> : null}
     </View>
   );
 });
@@ -49,5 +51,14 @@ const styles = StyleSheet.create({
   inputFocused: {
     borderColor: '#2F6B2F',
     backgroundColor: '#FAFFF9',
+  },
+  inputError: {
+    borderColor: '#DC2626',
+    backgroundColor: '#FEF2F2',
+  },
+  errorText: {
+    color: '#B91C1C',
+    fontSize: 12,
+    marginTop: -2,
   },
 });

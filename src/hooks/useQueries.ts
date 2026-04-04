@@ -15,13 +15,15 @@ export const useProfileQuery = (enabled = true) => {
   });
 };
 
-export const useBalancesQuery = (enabled = true) => {
+export const useBalancesQuery = (enabled = true, activeScreen = false) => {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   return useQuery({
     queryKey: ['balances'],
     queryFn: api.getBalances,
     enabled: enabled && isAuthenticated,
-    staleTime: 2 * 60 * 1000, // 2 minutes (more frequent for financial data)
+    staleTime: activeScreen ? 30 * 1000 : 2 * 60 * 1000,
+    refetchInterval: activeScreen ? 30 * 1000 : false,
+    refetchIntervalInBackground: false,
     gcTime: 5 * 60 * 1000, // 5 minutes
   });
 };

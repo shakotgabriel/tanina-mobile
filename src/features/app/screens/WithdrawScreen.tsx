@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -11,6 +11,7 @@ import CountryPicker, {
   Country,
   MOBILE_MONEY_PROVIDERS,
 } from '@/src/features/app/components/CountryPicker';
+import { useFormValidation } from '@/src/hooks/useFormValidation';
 import { useCashoutInitiateMutation, useCashoutConfirmMutation } from '@/src/hooks/useQueries';
 
 type Step = 'select_method' | 'select_country' | 'form';
@@ -42,6 +43,24 @@ export default function WithdrawScreen() {
   const [otpStep, setOtpStep] = useState(false);
   const [success, setSuccess] = useState(false);
 
+  const formValues = useMemo(
+    () => ({ provider, agentUserId, phone, amount, otp }),
+    [provider, agentUserId, phone, amount, otp]
+  );
+  const { errors, validateField, touchField } = useFormValidation(
+    {
+      provider: (value) => (String(value).trim() ? null : 'Select a provider'),
+      agentUserId: (value) => (String(value).trim() ? null : 'Agent user ID is required'),
+      phone: (value) => (String(value).trim().length >= 8 ? null : 'Enter a valid phone number'),
+      amount: (value) => {
+        const parsed = Number(value);
+        return Number.isFinite(parsed) && parsed > 0 ? null : 'Amount must be greater than 0';
+      },
+      otp: (value) => (String(value).trim().length >= 4 ? null : 'Enter a valid OTP'),
+    },
+    formValues
+  );
+
   function handleBack() {
     if (step === 'form' && method === 'mobile_money') {
       setStep('select_country');
@@ -66,21 +85,13 @@ export default function WithdrawScreen() {
   }
 
   const handleMobileMoneyWithdraw = () => {
-    if (!amount || isNaN(Number(amount)) || Number(amount) <= 0) {
-      notify.validation('Enter a valid amount');
-      return;
-    }
-    if (!phone.trim()) {
-      notify.validation('Enter a phone number');
-      return;
-    }
-    if (!provider) {
-      notify.validation('Select a provider');
-      return;
-    }
+    const providerError = validateField('provider', provider);
+    const agentError = validateField('agentUserId', agentUserId);
+    const phoneError = validateField('phone', phone);
+    const amountError = validateField('amount', amount);
 
-    if (!agentUserId.trim()) {
-      notify.validation('Enter agent user ID');
+    if (providerError || agentError || phoneError || amountError) {
+      notify.validation('Missing fields');
       return;
     }
 
@@ -109,7 +120,7 @@ export default function WithdrawScreen() {
   };
 
   const handleConfirmCashout = () => {
-    if (!otp || otp.length < 4) {
+    if (validateField('otp', otp)) {
       notify.validation('Enter a valid OTP');
       return;
     }
@@ -171,7 +182,11 @@ export default function WithdrawScreen() {
               {providers.map((p) => (
                 <TouchableOpacity
                   key={p.id}
-                  onPress={() => setProvider(p.id)}
+                  onPress={() => {
+                    setProvider(p.id);
+                    touchField('provider');
+                    validateField('provider', p.id);
+                  }}
                   className={`px-4 py-2 rounded-full border ${
                     provider === p.id ? 'bg-[#2F6B2F] border-[#2F6B2F]' : 'bg-white border-gray-200'
                   }`}
@@ -184,6 +199,7 @@ export default function WithdrawScreen() {
                 </TouchableOpacity>
               ))}
             </ScrollView>
+            {errors.provider ? <Text className="text-red-700 text-xs">{errors.provider}</Text> : null}
           </View>
 
           <Input
@@ -191,25 +207,43 @@ export default function WithdrawScreen() {
             placeholder="e.g. 44444444-4444-4444-4444-444444444444"
             autoCapitalize="none"
             value={agentUserId}
-            onChangeText={setAgentUserId}
+            onChangeText={(value) => {
+              setAgentUserId(value);
+              touchField('agentUserId');
+              validateField('agentUserId', value);
+            }}
+            error={errors.agentUserId}
           />
           <Input
             label="Mobile Money Number"
             placeholder="e.g. 0700 000 000"
             keyboardType="phone-pad"
             value={phone}
-            onChangeText={setPhone}
+            onChangeText={(value) => {
+              setPhone(value);
+              touchField('phone');
+              validateField('phone', value);
+            }}
+            error={errors.phone}
           />
           <Input
             label={`Amount (${country.currency})`}
             placeholder="0.00"
             keyboardType="decimal-pad"
             value={amount}
-            onChangeText={setAmount}
+            onChangeText={(value) => {
+              setAmount(value);
+              touchField('amount');
+              validateField('amount', value);
+            }}
+            error={errors.amount}
           />
           <Button onPress={handleMobileMoneyWithdraw} disabled={initiateCashout.isPending}>
-            {initiateCashout.isPending ? 'Processing...' : 'Continue'}
+            {initiateCashout.isPending ? 'Requesting OTP...' : 'Continue'}
           </Button>
+          {initiateCashout.isPending ? (
+            <Text className="text-gray-500 text-xs">Submitting request and waiting for OTP challenge...</Text>
+          ) : null}
         </View>
       )}
 
@@ -229,13 +263,20 @@ export default function WithdrawScreen() {
             <Text className="text-gray-700 text-sm font-medium">OTP Code</Text>
             <TextInput
               className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3.5 text-gray-900 text-lg tracking-widest font-bold text-center"
-              placeholder="0000"
+              placeholder={otpStep ? 'Enter 6-digit OTP' : ''}
               placeholderTextColor="#9CA3AF"
               keyboardType="number-pad"
               maxLength={6}
               value={otp}
-              onChangeText={setOtp}
+              onChangeText={(value) => {
+                setOtp(value);
+                touchField('otp');
+                validateField('otp', value);
+              }}
+              editable={otpStep}
             />
+            {errors.otp ? <Text className="text-red-700 text-xs mt-1">{errors.otp}</Text> : null}
+            <Text className="text-gray-500 text-xs mt-1">Code expires in 5 minutes.</Text>
           </View>
 
           <Button onPress={handleConfirmCashout} disabled={confirmCashout.isPending}>

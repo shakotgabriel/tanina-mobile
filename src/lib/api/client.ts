@@ -2,6 +2,7 @@ import axios from 'axios';
 import { Platform } from 'react-native';
 import { Buffer } from 'buffer';
 
+import { flushQueuedMutations, queueMutationRequest } from '@/src/lib/queue/syncQueue';
 import { useAuthStore } from '@/src/lib/store/authStore';
 
 // Service port mapping for direct service endpoints
@@ -62,6 +63,34 @@ const generateIdempotencyKey = () => {
   return `m-${Date.now()}-${Math.random().toString(36).slice(2, 12)}`;
 };
 
+const isMutationMethod = (method?: string) => {
+  if (!method) {
+    return false;
+  }
+
+  const normalized = method.toLowerCase();
+  return normalized === 'post' || normalized === 'put' || normalized === 'patch' || normalized === 'delete';
+};
+
+const hasSkipQueueHeader = (headers: unknown) => {
+  if (!headers) {
+    return false;
+  }
+
+  const serialized = typeof (headers as { toJSON?: () => unknown }).toJSON === 'function'
+    ? (headers as { toJSON: () => unknown }).toJSON()
+    : headers;
+  const source = (serialized ?? {}) as Record<string, unknown>;
+
+  return Object.entries(source).some(([key, value]) => {
+    return key.toLowerCase() === 'x-skip-queue' && Boolean(value);
+  });
+};
+
+type QueueAwareError = Error & {
+  offlineQueued?: boolean;
+};
+
 export const apiClient = axios.create({
   baseURL: 'http://localhost', // placeholder, will be overridden in interceptor
   timeout: 20000,
@@ -95,13 +124,39 @@ apiClient.interceptors.request.use((config) => {
 
 apiClient.interceptors.response.use(
   (response) => response,
-  (error) => {
+  async (error) => {
     const status = error?.response?.status;
 
     if (status === 401) {
       useAuthStore.getState().clearAuth();
     }
 
+    const requestConfig = error?.config;
+    const mutationRequest = isMutationMethod(requestConfig?.method);
+    const shouldQueue = !error?.response && mutationRequest && requestConfig?.url && !hasSkipQueueHeader(requestConfig?.headers);
+
+    if (shouldQueue) {
+      const queued = await queueMutationRequest(requestConfig);
+      if (queued) {
+        (error as QueueAwareError).offlineQueued = true;
+      }
+    }
+
     return Promise.reject(error);
   }
 );
+
+export const flushOfflineQueue = async () => {
+  return flushQueuedMutations(async (mutation) => {
+    await apiClient.request({
+      url: mutation.url,
+      method: mutation.method,
+      data: mutation.data,
+      params: mutation.params as Record<string, unknown> | undefined,
+      headers: {
+        ...mutation.headers,
+        'X-Skip-Queue': 'true',
+      },
+    });
+  });
+};

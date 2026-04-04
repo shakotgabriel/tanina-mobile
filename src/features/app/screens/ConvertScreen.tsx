@@ -1,8 +1,8 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { notify } from '@/src/lib/utils/notify';
 
-import { Button, Input } from '@/src/components/common';
+import { Button, EmptyState, Input, Skeleton } from '@/src/components/common';
 import Screen from '@/src/components/layout/Screen';
 import { useFxExecuteMutation, useFxQuoteMutation } from '@/src/hooks/useQueries';
 
@@ -16,6 +16,8 @@ export default function ConvertScreen() {
   const [toCurrency, setToCurrency] = useState('KES');
   const [fromAmount, setFromAmount] = useState('');
   const [quote, setQuote] = useState<any | null>(null);
+  const [quoteExpiresAtMs, setQuoteExpiresAtMs] = useState<number | null>(null);
+  const [quoteExpirySeconds, setQuoteExpirySeconds] = useState(0);
 
   const amountMinor = useMemo(() => {
     const parsed = Number(fromAmount);
@@ -26,6 +28,23 @@ export default function ConvertScreen() {
   }, [fromAmount]);
 
   const isBusy = quoteMutation.isPending || executeMutation.isPending;
+  const quoteExpired = Boolean(quote && quoteExpirySeconds <= 0);
+
+  useEffect(() => {
+    if (!quoteExpiresAtMs) {
+      setQuoteExpirySeconds(0);
+      return;
+    }
+
+    const tick = () => {
+      const seconds = Math.max(0, Math.floor((quoteExpiresAtMs - Date.now()) / 1000));
+      setQuoteExpirySeconds(seconds);
+    };
+
+    tick();
+    const interval = setInterval(tick, 1000);
+    return () => clearInterval(interval);
+  }, [quoteExpiresAtMs]);
 
   const requestQuote = () => {
     if (fromCurrency === toCurrency) {
@@ -46,11 +65,9 @@ export default function ConvertScreen() {
       {
         onSuccess: (data: any) => {
           setQuote(data);
+          const expiresAt = data?.quoteExpiresAt ? new Date(data.quoteExpiresAt).getTime() : Date.now() + 60000;
+          setQuoteExpiresAtMs(expiresAt);
           notify.success('Quote received');
-
-          if (data?.swapRequestId && data?.fxSnapshotId) {
-            performExecute(data.swapRequestId, data.fxSnapshotId);
-          }
         },
         onError: () => {
           notify.error('Quote failed');
@@ -72,6 +89,7 @@ export default function ConvertScreen() {
         onSuccess: () => {
           notify.success('Conversion completed');
           setQuote(null);
+          setQuoteExpiresAtMs(null);
           setFromAmount('');
         },
         onError: () => {
@@ -84,6 +102,11 @@ export default function ConvertScreen() {
   const executeSwap = () => {
     if (!quote?.swapRequestId || !quote?.fxSnapshotId) {
       notify.validation('Request a quote first');
+      return;
+    }
+
+    if (quoteExpired) {
+      notify.info('Quote expired', 'Request a fresh quote to continue.');
       return;
     }
 
@@ -143,18 +166,38 @@ export default function ConvertScreen() {
           </View>
         </ScrollView>
 
-        {quote && (
+        {quoteMutation.isPending ? (
+          <View style={{ backgroundColor: '#F8FAFC', borderRadius: 12, padding: 12, gap: 8 }}>
+            <Skeleton height={14} width={70} />
+            <Skeleton height={14} width="100%" />
+            <Skeleton height={14} width="45%" />
+          </View>
+        ) : quote ? (
           <View style={{ backgroundColor: '#F0F7F0', borderRadius: 12, padding: 12, gap: 6 }}>
             <Text style={{ color: '#111827', fontWeight: '600' }}>Quote</Text>
             <Text style={{ color: '#374151' }}>
               {(quote.fromAmountMinor / 100).toFixed(2)} {quote.fromCurrency} {'->'} {(quote.toAmountMinor / 100).toFixed(2)} {quote.toCurrency}
             </Text>
             <Text style={{ color: '#374151' }}>Rate: {quote.rate}</Text>
+            <Text style={{ color: quoteExpired ? '#B91C1C' : '#166534', fontWeight: '600' }}>
+              Quote expires in: {quoteExpirySeconds}s
+            </Text>
           </View>
+        ) : (
+          <EmptyState
+            title="No quote yet"
+            description="Enter amount and currencies, then tap Convert Now to fetch a live rate."
+          />
         )}
 
-        <Button onPress={quote ? executeSwap : requestQuote} disabled={isBusy}>
-          {isBusy ? 'Processing...' : quote ? 'Convert Now' : 'Convert Now'}
+        <Button onPress={quote ? executeSwap : requestQuote} disabled={isBusy || quoteExpired}>
+          {quoteMutation.isPending
+            ? 'Fetching quote...'
+            : executeMutation.isPending
+              ? 'Converting...'
+              : quote
+                ? 'Convert Now'
+                : 'Get Quote'}
         </Button>
 
         {isBusy ? <ActivityIndicator color="#2F6B2F" /> : null}

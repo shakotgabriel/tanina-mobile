@@ -170,6 +170,31 @@ const decodeUserIdFromAccessToken = (): string | null => {
   }
 };
 
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const MERCHANT_CODE_REGEX = /^\d{6}$/;
+
+const resolveMerchantUserId = async (merchantIdentifier: string): Promise<string> => {
+  const normalized = merchantIdentifier.trim();
+  if (!normalized) {
+    throw new Error('Merchant code or ID is required');
+  }
+
+  if (UUID_REGEX.test(normalized)) {
+    return normalized;
+  }
+
+  if (MERCHANT_CODE_REGEX.test(normalized)) {
+    const response = await apiClient.get<UserDTO | ApiResponse<UserDTO>>(ENDPOINTS.users.byMerchantCode(normalized));
+    const merchantUser = unwrapApiData(response.data);
+    if (!merchantUser?.userId) {
+      throw new Error('Merchant not found for provided code');
+    }
+    return merchantUser.userId;
+  }
+
+  throw new Error('Merchant ID must be a UUID or 6-digit merchant code');
+};
+
 const getCurrentUserId = async (): Promise<string> => {
   const tokenUserId = decodeUserIdFromAccessToken();
   if (tokenUserId) {
@@ -469,9 +494,11 @@ export const api = {
 
   createMerchantIntent: async (payload: MerchantIntentRequest) => {
     const userId = await getCurrentUserId();
+    const merchantIdentifier = String((payload as any).merchantUserId ?? (payload as any).merchantId ?? '').trim();
+    const merchantUserId = await resolveMerchantUserId(merchantIdentifier);
     const response = await apiClient.post<MerchantIntentDTO | ApiResponse<MerchantIntentDTO>>(ENDPOINTS.merchant.createIntent, {
       payerUserId: (payload as any).payerUserId ?? userId,
-      merchantUserId: (payload as any).merchantUserId ?? (payload as any).merchantId,
+      merchantUserId,
       amountMinor: payload.amountMinor,
       currency: payload.currency,
     });

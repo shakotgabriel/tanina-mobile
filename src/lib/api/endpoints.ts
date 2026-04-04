@@ -22,6 +22,7 @@ export const ENDPOINTS = {
     byId: (userId: string) => `${API_V1}/users/${userId}`,
     transactionHistory: (userId: string) => `${API_V1}/users/${userId}/transactions/history`,
     byEmail: (email: string) => `${API_V1}/users/email/${encodeURIComponent(email)}`,
+    byMerchantCode: (merchantCode: string) => `${API_V1}/users/merchant-code/${encodeURIComponent(merchantCode)}`,
     submitKyc: (userId: string) => `${API_V1}/users/${userId}/kyc`,
     verifyKyc: (userId: string) => `${API_V1}/users/${userId}/kyc/verify`,
     getKyc: (userId: string) => `${API_V1}/users/${userId}/kyc`,

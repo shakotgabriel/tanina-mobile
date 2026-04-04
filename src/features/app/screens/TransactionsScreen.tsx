@@ -20,6 +20,7 @@ import {
   txIconColor,
   txLabel,
 } from '@/src/lib/utils/transaction-ui';
+import { EmptyState, Skeleton } from '@/src/components/common';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -235,6 +236,7 @@ export default function TransactionsScreen() {
 
   const paginated = filtered.slice(0, page * PAGE_SIZE);
   const hasMore   = paginated.length < filtered.length;
+  const showLoadingSkeleton = isLoading && transactions.length === 0;
 
   return (
     <View className="flex-1 bg-[#F8FAFC]">
@@ -253,35 +255,40 @@ export default function TransactionsScreen() {
         <FilterChips options={DATE_RANGES} selected={dateFilter}   onSelect={(v) => { setDateFilter(v);   setPage(1); }} />
       </View>
 
-      <FlatList
-        data={paginated}
-        keyExtractor={(tx, index) => `${tx.id}-${tx.createdAt ?? tx.occurredAt ?? index}`}
-        renderItem={({ item }) => (
-          <TransactionItem tx={item} onPress={() => setSelected(item)} />
-        )}
-        ListEmptyComponent={
-          <View className="items-center justify-center py-20">
-            <Ionicons name="receipt-outline" size={40} color="#D1D5DB" />
-            <Text className="text-gray-400 text-sm mt-3">
-              {isLoading ? 'Loading…' : 'No transactions found'}
-            </Text>
-            {!isLoading && (
-              <Text className="text-gray-400 text-xs mt-1">Try a different date or status filter.</Text>
-            )}
-          </View>
-        }
-        ListFooterComponent={
-          hasMore ? (
-            <TouchableOpacity
-              onPress={() => setPage((p) => p + 1)}
-              className="mx-4 my-4 py-3 border border-gray-200 rounded-xl items-center bg-white"
-            >
-              <Text className="text-gray-600 text-sm font-semibold">Load more</Text>
-            </TouchableOpacity>
-          ) : null
-        }
-        contentContainerStyle={{ flexGrow: 1 }}
-      />
+      {showLoadingSkeleton ? (
+        <View className="px-4 pt-3 gap-3">
+          {Array.from({ length: 8 }).map((_, index) => (
+            <Skeleton key={`tx-skeleton-${index}`} height={70} />
+          ))}
+        </View>
+      ) : (
+        <FlatList
+          data={paginated}
+          keyExtractor={(tx, index) => `${tx.id}-${tx.createdAt ?? tx.occurredAt ?? index}`}
+          renderItem={({ item }) => (
+            <TransactionItem tx={item} onPress={() => setSelected(item)} />
+          )}
+          ListEmptyComponent={
+            <View className="items-center justify-center py-20 px-4">
+              <EmptyState
+                title="No transactions found"
+                description="Try a different date or status filter."
+              />
+            </View>
+          }
+          ListFooterComponent={
+            hasMore ? (
+              <TouchableOpacity
+                onPress={() => setPage((p) => p + 1)}
+                className="mx-4 my-4 py-3 border border-gray-200 rounded-xl items-center bg-white"
+              >
+                <Text className="text-gray-600 text-sm font-semibold">Load more</Text>
+              </TouchableOpacity>
+            ) : null
+          }
+          contentContainerStyle={{ flexGrow: 1 }}
+        />
+      )}
 
       <TransactionDetailModal tx={selected} onClose={() => setSelected(null)} />
     </View>

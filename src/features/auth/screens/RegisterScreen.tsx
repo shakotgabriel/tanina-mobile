@@ -16,7 +16,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { notify } from '@/src/lib/utils/notify';
 
 import { useRegister } from '@/src/features/auth/hooks/useAuth';
-import type { AccountType } from '@/src/types';
+
+type SignupRole = 'CUSTOMER' | 'MERCHANT';
 
 const PASSWORD_POLICY_REGEX = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z\d]).{12,128}$/;
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -30,13 +31,11 @@ export default function RegisterScreen() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [phone, setPhone] = useState('');
-  const [accountType, setAccountType] = useState<AccountType>('BASIC');
+  const [signupRole, setSignupRole] = useState<SignupRole>('CUSTOMER');
 
-  const ACCOUNT_TYPES = [
-    { value: 'BASIC', label: 'Basic', icon: 'person-outline' },
-    { value: 'PREMIUM', label: 'Premium', icon: 'star-outline' },
+  const SIGNUP_ROLES = [
+    { value: 'CUSTOMER', label: 'Customer', icon: 'person-outline' },
     { value: 'MERCHANT', label: 'Merchant', icon: 'storefront-outline' },
-    { value: 'AGENT', label: 'Agent', icon: 'briefcase-outline' },
   ] as const;
 
   const passwordScore = [
@@ -74,7 +73,8 @@ export default function RegisterScreen() {
       email: email.trim().toLowerCase(),
       password,
       phoneNumber: sanitizedPhone || undefined,
-      accountType,
+      role: signupRole,
+      accountType: signupRole,
     };
 
     if (!payload.firstName || !payload.lastName || !payload.email || !payload.password) {
@@ -210,12 +210,12 @@ export default function RegisterScreen() {
           {/* Account type */}
           <Text style={[styles.label, { marginTop: 6 }]}>Account type</Text>
           <View style={styles.typeGrid}>
-            {ACCOUNT_TYPES.map(({ value, label, icon }) => {
-              const active = accountType === value;
+            {SIGNUP_ROLES.map(({ value, label, icon }) => {
+              const active = signupRole === value;
               return (
                 <TouchableOpacity
                   key={value}
-                  onPress={() => setAccountType(value)}
+                  onPress={() => setSignupRole(value)}
                   activeOpacity={0.8}
                   style={[
                     styles.typeCard,
@@ -240,6 +240,7 @@ export default function RegisterScreen() {
               );
             })}
           </View>
+          <Text style={styles.typeHint}>Agent and admin accounts are created by internal staff only.</Text>
 
           {/* Password strength bar */}
           {passwordStrength && (
@@ -320,7 +321,12 @@ const styles = StyleSheet.create({
   typeGrid: {
     flexDirection: 'row',
     gap: 10,
+    marginBottom: 8,
+  },
+  typeHint: {
     marginBottom: 18,
+    fontSize: 12,
+    color: '#6B7280',
   },
   typeCard: {
     flex: 1,
