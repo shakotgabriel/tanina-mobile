@@ -18,11 +18,13 @@ export default function Screen({
     return (
       <SafeAreaView style={styles.safeArea}>
         <ScrollView
-          contentContainerStyle={styles.content}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
           refreshControl={
             onRefresh ? <RefreshControl refreshing={refreshing} onRefresh={onRefresh} /> : undefined
           }>
-          {children}
+          <View style={styles.content}>{children}</View>
         </ScrollView>
       </SafeAreaView>
     );
@@ -30,7 +32,9 @@ export default function Screen({
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <View style={styles.content}>{children}</View>
+      <View style={styles.rootContent}>
+        <View style={styles.content}>{children}</View>
+      </View>
     </SafeAreaView>
   );
 }
@@ -40,7 +44,16 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#F8FAFC',
   },
+  scrollContent: {
+    flexGrow: 1,
+  },
+  rootContent: {
+    flex: 1,
+  },
   content: {
+    width: '100%',
+    maxWidth: 520,
+    alignSelf: 'center',
     flexGrow: 1,
     padding: 16,
   },

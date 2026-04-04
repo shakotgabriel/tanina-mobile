@@ -25,6 +25,18 @@ In the output, you'll find options to open the app in a
 
 You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
 
+## API setup
+
+The frontend reads `EXPO_PUBLIC_API_BASE_URL` from `.env` and sends all Axios requests through that base URL.
+
+For a local backend running in Docker:
+
+- iOS simulator and web: `http://localhost:8080`
+- Android emulator: `http://10.0.2.2:8080`
+- Physical device: use your machine's LAN IP, for example `http://192.168.1.25:8080`
+
+If `EXPO_PUBLIC_API_BASE_URL` is not set, the app falls back to `http://localhost:8080` on iOS/web and `http://10.0.2.2:8080` on Android.
+
 ## Get a fresh project
 
 When you're ready, run:

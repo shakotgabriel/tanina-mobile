@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { notify } from '@/src/lib/utils/notify';
 
 import { Button, Input } from '@/src/components/common';
 import ActionScreen from '@/src/components/layout/ActionScreen';
@@ -10,23 +11,12 @@ import CountryPicker, {
   Country,
   MOBILE_MONEY_PROVIDERS,
 } from '@/src/features/app/components/CountryPicker';
+import { useMobileMoneyDepositMutation } from '@/src/hooks/useQueries';
 
 type Step = 'select_method' | 'select_country' | 'form';
-type DepositMethod = 'agent' | 'bank' | 'mobile_money';
+type DepositMethod = 'mobile_money';
 
 const DEPOSIT_METHODS: Method[] = [
-  {
-    id: 'agent',
-    icon: 'person-circle-outline',
-    title: 'Deposit via Agent',
-    description: 'Deposit cash through a nearby agent',
-  },
-  {
-    id: 'bank',
-    icon: 'business-outline',
-    title: 'Deposit via Bank Account',
-    description: 'Transfer from your bank account',
-  },
   {
     id: 'mobile_money',
     icon: 'phone-portrait-outline',
@@ -35,19 +25,16 @@ const DEPOSIT_METHODS: Method[] = [
   },
 ];
 
-const BANKS = ['Equity Bank', 'KCB Bank', 'Centenary Bank', 'Stanbic Bank', 'ABSA Bank'];
-
 export default function DepositScreen() {
   const router = useRouter();
+  const deposit = useMobileMoneyDepositMutation();
   const [step, setStep] = useState<Step>('select_method');
   const [method, setMethod] = useState<DepositMethod | null>(null);
   const [country, setCountry] = useState<Country | null>(null);
   const [provider, setProvider] = useState('');
-  const [agentCode, setAgentCode] = useState('');
-  const [bank, setBank] = useState('');
-  const [accountNumber, setAccountNumber] = useState('');
   const [phone, setPhone] = useState('');
   const [amount, setAmount] = useState('');
+  const [success, setSuccess] = useState(false);
 
   function handleBack() {
     if (step === 'form' && method === 'mobile_money') {
@@ -63,11 +50,7 @@ export default function DepositScreen() {
 
   function handleMethodSelect(id: string) {
     setMethod(id as DepositMethod);
-    if (id === 'mobile_money') {
-      setStep('select_country');
-    } else {
-      setStep('form');
-    }
+    setStep('select_country');
   }
 
   function handleCountrySelect(c: Country) {
@@ -79,10 +62,48 @@ export default function DepositScreen() {
   const stepTitle: Record<Step, string> = {
     select_method: 'Deposit',
     select_country: 'Select Country',
-    form: method === 'agent' ? 'Deposit via Agent' : method === 'bank' ? 'Deposit via Bank' : `Deposit via Mobile Money`,
+    form: 'Deposit via Mobile Money',
   };
 
   const providers = country ? MOBILE_MONEY_PROVIDERS[country.code] ?? [] : [];
+
+  const handleMobileMoneyDeposit = () => {
+    if (!amount || isNaN(Number(amount)) || Number(amount) <= 0) {
+      notify.validation('Enter a valid amount');
+      return;
+    }
+    if (!phone.trim()) {
+      notify.validation('Enter a phone number');
+      return;
+    }
+    if (!provider) {
+      notify.validation('Select a provider');
+      return;
+    }
+    if (!country) {
+      notify.validation('Select country first');
+      return;
+    }
+
+    const providerName = providers.find((p) => p.id === provider)?.name || provider;
+
+    deposit.mutate(
+      {
+        amountMinor: Math.round(Number(amount) * 100),
+        currency: country.code,
+        phoneNumber: phone,
+        provider: providerName,
+      },
+      {
+        onSuccess: () => {
+          setSuccess(true);
+        },
+        onError: () => {
+          notify.error('Deposit failed', 'Please try again');
+        },
+      }
+    );
+  };
 
   return (
     <ActionScreen title={stepTitle[step]} onBack={handleBack}>
@@ -92,63 +113,6 @@ export default function DepositScreen() {
 
       {step === 'select_country' && (
         <CountryPicker onSelect={handleCountrySelect} selected={country?.code} />
-      )}
-
-      {step === 'form' && method === 'agent' && (
-        <View className="gap-4">
-          <Input
-            label="Agent Code"
-            placeholder="e.g. 123456"
-            keyboardType="number-pad"
-            value={agentCode}
-            onChangeText={setAgentCode}
-          />
-          <Input
-            label="Amount (USD)"
-            placeholder="0.00"
-            keyboardType="decimal-pad"
-            value={amount}
-            onChangeText={setAmount}
-          />
-          <Button onPress={() => {}}>Continue</Button>
-        </View>
-      )}
-
-      {step === 'form' && method === 'bank' && (
-        <View className="gap-4">
-          <View className="gap-2">
-            <Text className="text-gray-700 text-sm font-medium">Select Bank</Text>
-            <View className="gap-2">
-              {BANKS.map((b) => (
-                <TouchableOpacity
-                  key={b}
-                  onPress={() => setBank(b)}
-                  className={`flex-row items-center justify-between bg-white rounded-xl p-3 border ${
-                    bank === b ? 'border-[#2F6B2F]' : 'border-gray-100'
-                  }`}
-                >
-                  <Text className={`text-sm font-medium ${bank === b ? 'text-[#2F6B2F]' : 'text-gray-700'}`}>{b}</Text>
-                  {bank === b && <Ionicons name="checkmark-circle" size={18} color="#2F6B2F" />}
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
-          <Input
-            label="Account Number"
-            placeholder="Enter account number"
-            keyboardType="number-pad"
-            value={accountNumber}
-            onChangeText={setAccountNumber}
-          />
-          <Input
-            label="Amount (USD)"
-            placeholder="0.00"
-            keyboardType="decimal-pad"
-            value={amount}
-            onChangeText={setAmount}
-          />
-          <Button onPress={() => {}}>Continue</Button>
-        </View>
       )}
 
       {step === 'form' && method === 'mobile_money' && country && (
@@ -197,7 +161,27 @@ export default function DepositScreen() {
             value={amount}
             onChangeText={setAmount}
           />
-          <Button onPress={() => {}}>Continue</Button>
+          <Button onPress={handleMobileMoneyDeposit} disabled={deposit.isPending}>
+            {deposit.isPending ? 'Processing...' : 'Continue'}
+          </Button>
+        </View>
+      )}
+
+      {success && (
+        <View className="flex-1 items-center justify-center py-12 gap-4">
+          <View className="w-20 h-20 rounded-full bg-green-100 items-center justify-center">
+            <Ionicons name="checkmark" size={40} color="#16A34A" />
+          </View>
+          <Text className="text-gray-900 text-2xl font-bold">Deposit Initiated</Text>
+          <Text className="text-gray-500 text-center">
+            Your deposit of {amount} {country?.currency} via {providers.find((p) => p.id === provider)?.name} has been initiated.
+          </Text>
+          <TouchableOpacity
+            onPress={() => router.back()}
+            className="w-full bg-[#2F6B2F] rounded-xl py-4 items-center mt-4"
+          >
+            <Text className="text-white font-bold text-base">Done</Text>
+          </TouchableOpacity>
         </View>
       )}
     </ActionScreen>

@@ -13,8 +13,14 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { notify } from '@/src/lib/utils/notify';
 
 import { useRegister } from '@/src/features/auth/hooks/useAuth';
+import type { AccountType } from '@/src/types';
+
+const PASSWORD_POLICY_REGEX = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z\d]).{12,128}$/;
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const PHONE_REGEX = /^\+?[0-9]{9,15}$/;
 
 export default function RegisterScreen() {
   const register = useRegister();
@@ -24,7 +30,7 @@ export default function RegisterScreen() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [phone, setPhone] = useState('');
-  const [accountType, setAccountType] = useState('BASIC');
+  const [accountType, setAccountType] = useState<AccountType>('BASIC');
 
   const ACCOUNT_TYPES = [
     { value: 'BASIC', label: 'Basic', icon: 'person-outline' },
@@ -33,16 +39,66 @@ export default function RegisterScreen() {
     { value: 'AGENT', label: 'Agent', icon: 'briefcase-outline' },
   ] as const;
 
+  const passwordScore = [
+    password.length >= 12,
+    /[a-z]/.test(password),
+    /[A-Z]/.test(password),
+    /\d/.test(password),
+    /[^A-Za-z\d]/.test(password),
+  ].filter(Boolean).length;
+
   const passwordStrength =
     password.length === 0 ? null
-    : password.length < 6 ? 'weak'
-    : password.length < 10 ? 'fair'
+    : passwordScore <= 2 ? 'weak'
+    : passwordScore <= 4 ? 'fair'
     : 'strong';
 
   const strengthColor =
     passwordStrength === 'weak' ? '#EF4444'
     : passwordStrength === 'fair' ? '#F59E0B'
     : '#2F6B2F';
+
+  const normalizedEmail = email.trim().toLowerCase();
+  const canSubmit =
+    firstName.trim().length > 0 &&
+    lastName.trim().length > 0 &&
+    normalizedEmail.length > 0 &&
+    password.length > 0 &&
+    !register.isPending;
+
+  const handleRegister = () => {
+    const sanitizedPhone = phone.replace(/\s+/g, '').trim();
+    const payload = {
+      firstName: firstName.trim(),
+      lastName: lastName.trim(),
+      email: email.trim().toLowerCase(),
+      password,
+      phoneNumber: sanitizedPhone || undefined,
+      accountType,
+    };
+
+    if (!payload.firstName || !payload.lastName || !payload.email || !payload.password) {
+      notify.validation('Missing details');
+      return;
+    }
+
+    if (!EMAIL_REGEX.test(payload.email)) {
+      notify.validation('Invalid email');
+      return;
+    }
+
+    if (!PASSWORD_POLICY_REGEX.test(payload.password)) {
+      notify.validation('Weak password');
+      return;
+    }
+
+    if (payload.phoneNumber && !PHONE_REGEX.test(payload.phoneNumber)) {
+      notify.validation('Invalid phone number');
+      return;
+    }
+
+    register.mutate(payload);
+  };
 
   return (
     <SafeAreaView style={styles.root} edges={['top']}>
@@ -112,6 +168,7 @@ export default function RegisterScreen() {
               keyboardType="email-address"
               autoCapitalize="none"
               autoComplete="email"
+              autoCorrect={false}
             />
           </View>
 
@@ -133,7 +190,7 @@ export default function RegisterScreen() {
             <Ionicons name="lock-closed-outline" size={18} color="#9CA3AF" style={styles.inputIcon} />
             <TextInput
               style={[styles.input, { flex: 1 }]}
-              placeholder="Min. 8 characters"
+              placeholder="12+ chars, mixed case, number, symbol"
               placeholderTextColor="#9CA3AF"
               value={password}
               onChangeText={setPassword}
@@ -148,6 +205,7 @@ export default function RegisterScreen() {
               />
             </TouchableOpacity>
           </View>
+          <Text style={styles.passwordHint}>Use 12+ chars with upper, lower, number, and symbol.</Text>
 
           {/* Account type */}
           <Text style={[styles.label, { marginTop: 6 }]}>Account type</Text>
@@ -207,9 +265,9 @@ export default function RegisterScreen() {
           )}
 
           <TouchableOpacity
-            style={[styles.button, register.isPending && styles.buttonDisabled, { marginTop: 24 }]}
-            onPress={() => register.mutate({ firstName, lastName, email, password, phoneNumber: phone, accountType })}
-            disabled={register.isPending}
+            style={[styles.button, !canSubmit && styles.buttonDisabled, { marginTop: 24 }]}
+            onPress={handleRegister}
+            disabled={!canSubmit}
             activeOpacity={0.85}
           >
             <Text style={styles.buttonText}>
@@ -314,6 +372,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     marginBottom: 18,
   },
+  passwordHint: {
+    marginTop: -10,
+    marginBottom: 10,
+    fontSize: 12,
+    color: '#6B7280',
+  },
   inputIcon: { marginRight: 10 },
   input: { flex: 1, paddingVertical: 14, fontSize: 15, color: '#111827' },
   strengthRow: {
@@ -335,10 +399,7 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     alignItems: 'center',
     marginBottom: 24,
-    shadowColor: '#2F6B2F',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
+    boxShadow: '0px 4px 8px rgba(47, 107, 47, 0.25)',
     elevation: 4,
   },
   buttonDisabled: { opacity: 0.65 },

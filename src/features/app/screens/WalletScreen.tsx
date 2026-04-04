@@ -9,19 +9,34 @@ import {
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import Toast from 'react-native-toast-message';
+import { notify } from '@/src/lib/utils/notify';
 
 import Screen from '@/src/components/layout/Screen';
-import { useBalancesQuery, useTransactionsQuery } from '@/src/hooks/useQueries';
+import {
+  useBalancesQuery,
+  useTransactionsQuery,
+  useMobileMoneyDepositMutation,
+  useFxQuoteMutation,
+  useFxExecuteMutation,
+} from '@/src/hooks/useQueries';
+import { useEnrichedTransactions } from '@/src/hooks/useEnrichedTransactions';
 import { formatCurrency } from '@/src/lib/utils/currency';
+import {
+  isCredit,
+  statusBg,
+  statusText,
+  txIcon,
+  txIconColor,
+  txLabel,
+} from '@/src/lib/utils/transaction-ui';
 
-const SECONDARY_CURRENCIES = ['SSP', 'KSH', 'UGX', 'RWF'];
-const ALL_CURRENCIES = ['USD', 'SSP', 'KSH', 'UGX', 'RWF'];
+const SECONDARY_CURRENCIES = ['SSP', 'KES', 'UGX', 'RWF'];
+const ALL_CURRENCIES = ['USD', 'SSP', 'KES', 'UGX', 'RWF'];
 
 const FX_RATES: Record<string, number> = {
   USD: 1,
   SSP: 1300,
-  KSH: 130,
+  KES: 130,
   UGX: 3700,
   RWF: 1280,
 };
@@ -29,7 +44,7 @@ const FX_RATES: Record<string, number> = {
 const CURRENCY_META: Record<string, { flag: string; name: string }> = {
   USD: { flag: '🇺🇸', name: 'US Dollar' },
   SSP: { flag: '🇸🇸', name: 'S. Sudan Pound' },
-  KSH: { flag: '🇰🇪', name: 'Kenya Shilling' },
+  KES: { flag: '🇰🇪', name: 'Kenya Shilling' },
   UGX: { flag: '🇺🇬', name: 'Uganda Shilling' },
   RWF: { flag: '🇷🇼', name: 'Rwanda Franc' },
 };
@@ -37,7 +52,7 @@ const CURRENCY_META: Record<string, { flag: string; name: string }> = {
 const MOBILE_MONEY_PROVIDERS: Record<string, { name: string; placeholder: string }[]> = {
   SSP: [{ name: 'MTN MoMo', placeholder: '+211 9XX XXX XXX' }],
   UGX: [{ name: 'MTN Mobile Money', placeholder: '+256 7XX XXX XXX' }],
-  KSH: [{ name: 'M-Pesa', placeholder: '+254 7XX XXX XXX' }],
+  KES: [{ name: 'M-Pesa', placeholder: '+254 7XX XXX XXX' }],
   RWF: [{ name: 'MTN Mobile Money', placeholder: '+250 7XX XXX XXX' }],
   USD: [
     { name: 'Mobile Money', placeholder: 'Phone number' },
@@ -60,31 +75,40 @@ function TopUpModal({
   const [currency, setCurrency] = useState(defaultCurrency ?? 'USD');
   const [amount, setAmount] = useState('');
   const [phone, setPhone] = useState('');
-  const [loading, setLoading] = useState(false);
+  const deposit = useMobileMoneyDepositMutation();
 
   const providers = MOBILE_MONEY_PROVIDERS[currency] ?? MOBILE_MONEY_PROVIDERS['USD'];
   const provider = providers[0];
 
   const handleConfirm = async () => {
     if (!amount || isNaN(Number(amount)) || Number(amount) <= 0) {
-      Toast.show({ type: 'error', text1: 'Enter a valid amount' });
+      notify.validation('Enter a valid amount');
       return;
     }
     if (!phone.trim()) {
-      Toast.show({ type: 'error', text1: 'Enter a phone number' });
+      notify.validation('Enter a phone number');
       return;
     }
-    setLoading(true);
-    await new Promise((r) => setTimeout(r, 1200));
-    setLoading(false);
-    Toast.show({
-      type: 'success',
-      text1: 'Top-up initiated',
-      text2: `${currency} ${amount} via ${provider.name}`,
-    });
-    setAmount('');
-    setPhone('');
-    onClose();
+
+    deposit.mutate(
+      {
+        amountMinor: Math.round(Number(amount) * 100),
+        currency,
+        phoneNumber: phone,
+        provider: provider.name,
+      },
+      {
+        onSuccess: () => {
+          notify.success('Top-up initiated', `${currency} ${amount} via ${provider.name}`);
+          setAmount('');
+          setPhone('');
+          onClose();
+        },
+        onError: () => {
+          notify.error('Top-up failed', 'Please try again');
+        },
+      }
+    );
   };
 
   return (
@@ -145,10 +169,10 @@ function TopUpModal({
 
           <TouchableOpacity
             onPress={handleConfirm}
-            disabled={loading}
+            disabled={deposit.isPending}
             className="bg-[#2F6B2F] rounded-xl py-4 items-center"
           >
-            {loading
+            {deposit.isPending
               ? <ActivityIndicator color="#fff" />
               : <Text className="text-white font-bold text-base">Confirm Top Up</Text>}
           </TouchableOpacity>
@@ -172,21 +196,26 @@ function ExchangeModal({
   balances?: any[];
 }) {
   const [fromCurrency, setFromCurrency] = useState(defaultFrom);
-  const [toCurrency, setToCurrency] = useState(defaultFrom === 'USD' ? 'KSH' : 'USD');
+  const [toCurrency, setToCurrency] = useState(defaultFrom === 'USD' ? 'KES' : 'USD');
   const [fromAmount, setFromAmount] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [quoteId, setQuoteId] = useState<string | null>(null);
+  const [fxSnapshotId, setFxSnapshotId] = useState<string | null>(null);
+  const fxQuote = useFxQuoteMutation();
+  const fxExecute = useFxExecuteMutation();
 
   useEffect(() => {
     if (visible) {
       setFromCurrency(defaultFrom);
-      setToCurrency(defaultFrom === 'USD' ? 'KSH' : 'USD');
+      setToCurrency(defaultFrom === 'USD' ? 'KES' : 'USD');
       setFromAmount('');
+      setQuoteId(null);
+      setFxSnapshotId(null);
     }
   }, [visible, defaultFrom]);
 
   const numericAmount = Number(fromAmount);
-  const fee = numericAmount * 0.01;
   const rate = (FX_RATES[toCurrency] ?? 1) / (FX_RATES[fromCurrency] ?? 1);
+  const fee = numericAmount * 0.01;
   const toAmount = (numericAmount - fee) * rate;
 
   const fromBalance = (balances as any[]).find((b) => b.currency === fromCurrency);
@@ -199,34 +228,121 @@ function ExchangeModal({
     setFromCurrency(toCurrency);
     setToCurrency(prev);
     setFromAmount('');
+    setQuoteId(null);
+    setFxSnapshotId(null);
   }
 
   function handleSelectFrom(c: string) {
     if (c === toCurrency) setToCurrency(fromCurrency);
     setFromCurrency(c);
     setFromAmount('');
+    setQuoteId(null);
+    setFxSnapshotId(null);
   }
 
   function handleSelectTo(c: string) {
     if (c === fromCurrency) setFromCurrency(toCurrency);
     setToCurrency(c);
+    setQuoteId(null);
+    setFxSnapshotId(null);
   }
 
-  const handleConfirm = async () => {
+  const handleGetQuote = () => {
     if (!fromAmount || isNaN(numericAmount) || numericAmount <= 0) {
-      Toast.show({ type: 'error', text1: 'Enter a valid amount' });
+      notify.validation('Enter a valid amount');
       return;
     }
-    setLoading(true);
-    await new Promise((r) => setTimeout(r, 1400));
-    setLoading(false);
-    Toast.show({
-      type: 'success',
-      text1: 'Exchange submitted',
-      text2: `${fromCurrency} ${numericAmount.toFixed(2)} → ${toCurrency} ${toAmount.toFixed(2)}`,
-    });
-    setFromAmount('');
-    onClose();
+
+    fxQuote.mutate(
+      {
+        fromCurrency,
+        toCurrency,
+        fromAmountMinor: Math.round(numericAmount * 100),
+      },
+      {
+        onSuccess: (data: any) => {
+          setQuoteId(data.swapRequestId ?? null);
+          setFxSnapshotId(data.fxSnapshotId ?? null);
+          notify.success('Quote received');
+        },
+        onError: () => {
+          notify.error('Quote failed', 'Could not get FX quote');
+        },
+      }
+    );
+  };
+
+  const executeSwap = (swapRequestId: string, snapshotId: string) => {
+    fxExecute.mutate(
+      {
+        payload: {
+          swapRequestId,
+          fxSnapshotId: snapshotId,
+        },
+        swapRequestId,
+      },
+      {
+        onSuccess: () => {
+          notify.success(
+            'Exchange successful',
+            `${fromCurrency} ${numericAmount.toFixed(2)} → ${toCurrency} ${toAmount.toFixed(2)}`
+          );
+          setFromAmount('');
+          setQuoteId(null);
+          setFxSnapshotId(null);
+          onClose();
+        },
+        onError: () => {
+          notify.error('Exchange failed', 'Please try again');
+        },
+      }
+    );
+  };
+
+  const handleConfirm = async () => {
+    if (!quoteId) {
+      if (!fromAmount || isNaN(numericAmount) || numericAmount <= 0) {
+        notify.validation('Enter a valid amount');
+        return;
+      }
+
+      fxQuote.mutate(
+        {
+          fromCurrency,
+          toCurrency,
+          fromAmountMinor: Math.round(numericAmount * 100),
+        },
+        {
+          onSuccess: (data: any) => {
+            const nextQuoteId = data.swapRequestId ?? null;
+            const nextSnapshotId = data.fxSnapshotId ?? null;
+
+            setQuoteId(nextQuoteId);
+            setFxSnapshotId(nextSnapshotId);
+
+            if (!nextQuoteId || !nextSnapshotId) {
+              notify.error('Quote failed', 'Could not prepare the exchange');
+              return;
+            }
+
+            notify.success('Quote received', 'Executing exchange now');
+
+            executeSwap(nextQuoteId, nextSnapshotId);
+          },
+          onError: () => {
+            notify.error('Quote failed', 'Could not get FX quote');
+          },
+        }
+      );
+      return;
+    }
+
+    if (!fxSnapshotId) {
+      notify.error('Quote expired', 'Please request a new quote');
+      return;
+    }
+
+    executeSwap(quoteId, fxSnapshotId);
   };
 
   const rateLabel =
@@ -345,14 +461,16 @@ function ExchangeModal({
 
           <TouchableOpacity
             onPress={handleConfirm}
-            disabled={loading}
+            disabled={fxQuote.isPending || fxExecute.isPending}
             className="bg-[#2F6B2F] rounded-xl py-4 items-center"
           >
-            {loading
-              ? <ActivityIndicator color="#fff" />
-              : <Text className="text-white font-bold text-base">
-                  {fromCurrency} → {toCurrency} · Confirm
-                </Text>}
+            {fxQuote.isPending || fxExecute.isPending ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text className="text-white font-bold text-base">
+                {quoteId ? `Exchange Now · ${toCurrency}` : `Exchange Now · ${fromCurrency} → ${toCurrency}`}
+              </Text>
+            )}
           </TouchableOpacity>
         </View>
       </View>
@@ -363,15 +481,18 @@ function ExchangeModal({
 // ─── Wallet Screen ────────────────────────────────────────────────────────────
 
 export default function WalletScreen() {
-  const { data: balances = [] } = useBalancesQuery();
-  const { data: transactions = [] } = useTransactionsQuery();
+  const { data: balancesData, isLoading: balancesLoading } = useBalancesQuery(true); // Enable query when viewing wallet
+  const { data: transactionsData, isLoading: transactionsLoading } = useTransactionsQuery(true); // Enable query to show recent transactions
+  const balances = Array.isArray(balancesData) ? balancesData : [];
+  const transactions = Array.isArray(transactionsData) ? transactionsData : [];
   const [topUpVisible, setTopUpVisible] = useState(false);
   const [topUpCurrency, setTopUpCurrency] = useState<string | undefined>();
   const [exchangeVisible, setExchangeVisible] = useState(false);
   const [exchangeFrom, setExchangeFrom] = useState<string>('USD');
+  const enrichedTransactions = useEnrichedTransactions(transactions as any[]);
 
   const primaryData = (balances as any[]).find((b) => b.currency === 'USD') ?? (balances as any[])[0];
-  const recent = (transactions as any[]).slice(0, 4);
+  const recent = enrichedTransactions.slice(0, 4);
 
   const openTopUp = (currency?: string) => {
     setTopUpCurrency(currency);
@@ -387,6 +508,18 @@ export default function WalletScreen() {
     <Screen scrollable>
       <Text className="text-gray-900 text-2xl font-bold mb-5">My Wallet</Text>
 
+      {balancesLoading ? (
+        <>
+          {/* Loading skeleton for primary balance card */}
+          <View className="bg-[#2F6B2F]/20 rounded-2xl p-5 mb-5 h-48" />
+          {/* Loading skeleton for secondary wallets */}
+          <Text className="text-gray-700 text-base font-semibold mb-3">Other Wallets</Text>
+          {[1, 2, 3, 4].map((i) => (
+            <View key={i} className="bg-gray-100 rounded-2xl px-4 pt-3 pb-3 mb-2 h-20" />
+          ))}
+        </>
+      ) : (
+        <>
       {/* Primary Balance Card — always visible */}
       <View className="bg-[#2F6B2F] rounded-2xl p-5 mb-5">
         <Text className="text-white/60 text-xs font-medium uppercase tracking-widest mb-2">
@@ -466,7 +599,13 @@ export default function WalletScreen() {
       {/* Recent Activity */}
       <View className="mt-5 mb-4">
         <Text className="text-gray-700 text-base font-semibold mb-3">Recent Activity</Text>
-        {recent.length === 0 ? (
+        {transactionsLoading ? (
+          <View className="space-y-2">
+            {[1, 2, 3, 4].map((i) => (
+              <View key={i} className="bg-gray-100 rounded-2xl h-16" />
+            ))}
+          </View>
+        ) : recent.length === 0 ? (
           <View className="bg-white border border-gray-100 rounded-2xl p-8 items-center">
             <Ionicons name="receipt-outline" size={32} color="#D1D5DB" />
             <Text className="text-gray-400 text-sm mt-2">No transactions yet</Text>
@@ -474,32 +613,45 @@ export default function WalletScreen() {
         ) : (
           <View className="bg-white border border-gray-100 rounded-2xl overflow-hidden">
             {recent.map((tx, idx) => (
+              (() => {
+                const credit = isCredit(tx as any);
+                const color = txIconColor((tx as any).type, (tx as any).direction);
+                return (
               <View
-                key={tx.id}
+                key={`${tx.id}-${(tx as any).createdAt ?? (tx as any).occurredAt ?? idx}`}
                 className={`flex-row items-center px-4 py-3 ${idx < recent.length - 1 ? 'border-b border-gray-100' : ''}`}
               >
-                <View className="w-9 h-9 rounded-full bg-gray-100 items-center justify-center mr-3">
-                  <Ionicons name="swap-horizontal-outline" size={15} color="#6B7280" />
+                <View
+                  className="w-9 h-9 rounded-full items-center justify-center mr-3"
+                  style={{ backgroundColor: color + '18' }}
+                >
+                  <Ionicons name={txIcon((tx as any).type)} size={15} color={color} />
                 </View>
                 <View className="flex-1">
-                  <Text className="text-gray-800 text-sm font-semibold capitalize">
-                    {tx.note ?? 'Transfer'}
+                  <Text className="text-gray-800 text-sm font-semibold">
+                    {txLabel(tx.type)}
                   </Text>
-                  <Text className="text-gray-400 text-xs">{tx.currency}</Text>
+                  <Text className="text-gray-400 text-xs mt-0.5" numberOfLines={1}>
+                    {tx.counterpartyLabel ?? tx.counterparty ?? (tx.counterpartyUserId ? 'Resolving user...' : undefined) ?? tx.description ?? tx.currency}
+                  </Text>
                 </View>
                 <View className="items-end">
-                  <Text className="text-gray-900 text-sm font-semibold">
-                    {formatCurrency(tx.amountMinor, tx.currency)}
+                  <Text style={{ color }} className="text-sm font-semibold">
+                    {(credit ? '+' : '-')} {formatCurrency(tx.amountMinor, tx.currency)}
                   </Text>
-                  <Text className={`text-xs capitalize ${tx.status === 'completed' ? 'text-green-600' : tx.status === 'pending' ? 'text-amber-500' : 'text-red-500'}`}>
-                    {tx.status}
-                  </Text>
+                  <View className={`mt-1 px-2 py-0.5 rounded-full ${statusBg(tx.status)}`}>
+                    <Text className={`text-[10px] font-semibold uppercase ${statusText(tx.status)}`}>{tx.status}</Text>
+                  </View>
                 </View>
               </View>
+                );
+              })()
             ))}
           </View>
         )}
       </View>
+        </>
+      )}
 
       <TopUpModal visible={topUpVisible} onClose={() => setTopUpVisible(false)} defaultCurrency={topUpCurrency} />
       <ExchangeModal

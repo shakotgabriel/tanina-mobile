@@ -100,6 +100,7 @@ export type UserDTO = {
   businessName?: string;
   businessRegistrationNumber?: string;
   businessType?: BusinessType;
+  merchantCode?: string;
   status?: UserStatus;
   createdAt?: ISODateTime;
   updatedAt?: ISODateTime;
@@ -326,4 +327,17 @@ export type MerchantAuthorizeRequest = {
 
 export type MerchantCaptureRequest = {
   amountMinor?: number;
+};
+
+export type UnifiedTransactionDTO = {
+  id: UUID;
+  type: string;
+  direction?: 'CREDIT' | 'DEBIT';
+  status: string;
+  amountMinor: number;
+  currency: string;
+  counterpartyUserId?: UUID | null;
+  description?: string | null;
+  occurredAt?: ISODateTime | null;
+  source?: string;
 };

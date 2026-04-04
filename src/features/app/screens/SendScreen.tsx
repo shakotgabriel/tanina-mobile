@@ -11,18 +11,16 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import Toast from 'react-native-toast-message';
+import { notify } from '@/src/lib/utils/notify';
 
 import ActionScreen from '@/src/components/layout/ActionScreen';
+import { MOBILE_MONEY_PROVIDERS, SUPPORTED_COUNTRIES } from '@/src/features/app/components/CountryPicker';
 import MethodSelector, { Method } from '@/src/features/app/components/MethodSelector';
-import CountryPicker, {
-  Country,
-  MOBILE_MONEY_PROVIDERS,
-} from '@/src/features/app/components/CountryPicker';
-import { useLookupUserMutation, useSendP2PMutation } from '@/src/hooks/useQueries';
+import { useFxQuoteMutation, useLookupUserMutation, useSendP2PMutation } from '@/src/hooks/useQueries';
 import { UserDTO } from '@/src/types';
+import { formatCurrency } from '@/src/lib/utils/currency';
 
-type Step = 'select_method' | 'select_country' | 'form';
+type Step = 'select_method' | 'form';
 type SendMethod = 'to_user' | 'international';
 
 const SEND_METHODS: Method[] = [
@@ -34,19 +32,55 @@ const SEND_METHODS: Method[] = [
   },
   {
     id: 'international',
-    icon: 'globe-outline',
+    icon: 'airplane-outline',
     title: 'International Transfer',
-    description: 'Send to Uganda, Kenya, Rwanda or South Sudan',
+    description: 'Send to mobile money numbers in another country with FX quote',
   },
 ];
 
 const CURRENCIES = [
   { code: 'USD', flag: '🇺🇸' },
   { code: 'SSP', flag: '🇸🇸' },
-  { code: 'KSH', flag: '🇰🇪' },
+  { code: 'KES', flag: '🇰🇪' },
   { code: 'UGX', flag: '🇺🇬' },
   { code: 'RWF', flag: '🇷🇼' },
 ];
+
+const COUNTRY_TO_CURRENCY: Record<string, string> = {
+  KE: 'KES',
+  UG: 'UGX',
+  SS: 'SSP',
+  RW: 'RWF',
+};
+
+function CountryChipList({ selected, onSelect }: { selected: string; onSelect: (code: string) => void }) {
+  return (
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 18 }}>
+      <View style={{ flexDirection: 'row', gap: 8 }}>
+        {SUPPORTED_COUNTRIES.map((country) => {
+          const active = selected === country.code;
+          return (
+            <TouchableOpacity
+              key={country.code}
+              onPress={() => onSelect(country.code)}
+              activeOpacity={0.8}
+              style={[
+                styles.currencyChip,
+                active && styles.currencyChipActive,
+                { alignItems: 'center', flexDirection: 'row' },
+              ]}
+            >
+              <Text style={{ fontSize: 16, marginRight: 5 }}>{country.flag}</Text>
+              <Text style={[styles.currencyChipText, active && styles.currencyChipTextActive]}>
+                {country.code}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+    </ScrollView>
+  );
+}
 
 function P2PSendForm({ onDone }: { onDone: () => void }) {
   const lookup = useLookupUserMutation();
@@ -66,7 +100,7 @@ function P2PSendForm({ onDone }: { onDone: () => void }) {
       onSuccess: (user) => setRecipient(user as UserDTO),
       onError: () => {
         setRecipient(null);
-        Toast.show({ type: 'error', text1: 'User not found', text2: 'No Tanina account found for that email.' });
+        notify.error('User not found', 'No Tanina account found for that email.');
       },
     });
   }
@@ -75,7 +109,7 @@ function P2PSendForm({ onDone }: { onDone: () => void }) {
     if (!recipient) return;
     const num = parseFloat(amount);
     if (!num || num <= 0) {
-      Toast.show({ type: 'error', text1: 'Invalid amount', text2: 'Enter a valid amount greater than 0.' });
+      notify.validation('Invalid amount');
       return;
     }
     setConfirmVisible(true);
@@ -93,7 +127,7 @@ function P2PSendForm({ onDone }: { onDone: () => void }) {
         },
         onError: () => {
           setConfirmVisible(false);
-          Toast.show({ type: 'error', text1: 'Transfer failed', text2: 'Please check your balance and try again.' });
+          notify.error('Transfer failed', 'Please check your balance and try again.');
         },
       }
     );
@@ -275,21 +309,243 @@ function P2PSendForm({ onDone }: { onDone: () => void }) {
   );
 }
 
+function InternationalTransferForm({ onDone }: { onDone: () => void }) {
+  const fxQuote = useFxQuoteMutation();
+  const [fromCurrency, setFromCurrency] = useState('USD');
+  const [destinationCountry, setDestinationCountry] = useState('KE');
+  const [providerId, setProviderId] = useState(MOBILE_MONEY_PROVIDERS.KE[0].id);
+  const [mobileNumber, setMobileNumber] = useState('');
+  const [amount, setAmount] = useState('');
+  const [quote, setQuote] = useState<any | null>(null);
+  const [showSummary, setShowSummary] = useState(false);
+  const [done, setDone] = useState(false);
+
+  const destinationCurrency = COUNTRY_TO_CURRENCY[destinationCountry] ?? 'KES';
+  const providers = MOBILE_MONEY_PROVIDERS[destinationCountry as keyof typeof MOBILE_MONEY_PROVIDERS] ?? [];
+  const selectedProvider = providers.find((provider) => provider.id === providerId) ?? providers[0];
+  const amountMinor = Math.round(Number(amount || '0') * 100);
+  const estimatedReceive = quote?.toAmountMinor ? formatCurrency(quote.toAmountMinor, destinationCurrency) : '—';
+
+  function resetQuote() {
+    setQuote(null);
+    setShowSummary(false);
+  }
+
+  function handleQuote() {
+    if (!Number.isFinite(Number(amount)) || Number(amount) <= 0) {
+      notify.validation('Invalid amount');
+      return;
+    }
+
+    fxQuote.mutate(
+      {
+        fromCurrency,
+        toCurrency: destinationCurrency,
+        fromAmountMinor: amountMinor,
+      },
+      {
+        onSuccess: (data) => {
+          setQuote(data);
+          setShowSummary(true);
+        },
+        onError: () => {
+          notify.error('Quote failed', 'Unable to fetch exchange rate.');
+        },
+      }
+    );
+  }
+
+  function handleConfirm() {
+    if (!quote) {
+      handleQuote();
+      return;
+    }
+
+    setShowSummary(false);
+    setTimeout(() => {
+      setDone(true);
+      notify.success('Transfer queued', 'Demo payout created for the investors presentation.');
+    }, 650);
+  }
+
+  if (done) {
+    return (
+      <View style={styles.successBox}>
+        <View style={styles.successIcon}>
+          <Ionicons name="checkmark" size={36} color="#FFFFFF" />
+        </View>
+        <Text style={styles.successTitle}>Sent!</Text>
+        <Text style={styles.successSub}>
+          Demo transfer to {mobileNumber} via {selectedProvider?.name ?? 'mobile money'} in {destinationCountry}
+        </Text>
+        <TouchableOpacity style={styles.doneBtn} onPress={onDone} activeOpacity={0.85}>
+          <Text style={styles.doneBtnText}>Done</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  return (
+    <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+      <Text style={styles.label}>Send from</Text>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 18 }}>
+        <View style={{ flexDirection: 'row', gap: 8 }}>
+          {CURRENCIES.map(({ code, flag }) => {
+            const active = fromCurrency === code;
+            return (
+              <TouchableOpacity
+                key={code}
+                onPress={() => { setFromCurrency(code); resetQuote(); }}
+                activeOpacity={0.8}
+                style={[styles.currencyChip, active && styles.currencyChipActive]}
+              >
+                <Text style={{ fontSize: 16, marginRight: 5 }}>{flag}</Text>
+                <Text style={[styles.currencyChipText, active && styles.currencyChipTextActive]}>{code}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      </ScrollView>
+
+      <Text style={styles.label}>Destination country</Text>
+      <CountryChipList
+        selected={destinationCountry}
+        onSelect={(code) => {
+          setDestinationCountry(code);
+          const nextProvider = MOBILE_MONEY_PROVIDERS[code as keyof typeof MOBILE_MONEY_PROVIDERS]?.[0]?.id;
+          if (nextProvider) {
+            setProviderId(nextProvider);
+          }
+          resetQuote();
+        }}
+      />
+
+      <Text style={styles.label}>Mobile money provider</Text>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 18 }}>
+        <View style={{ flexDirection: 'row', gap: 8 }}>
+          {providers.map((provider) => {
+            const active = providerId === provider.id;
+            return (
+              <TouchableOpacity
+                key={provider.id}
+                onPress={() => {
+                  setProviderId(provider.id);
+                  resetQuote();
+                }}
+                activeOpacity={0.8}
+                style={[styles.currencyChip, active && styles.currencyChipActive]}
+              >
+                <Text style={[styles.currencyChipText, active && styles.currencyChipTextActive]}>{provider.name}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      </ScrollView>
+
+      <Text style={styles.label}>Recipient mobile number</Text>
+      <TextInput
+        style={styles.noteInput}
+        placeholder="e.g. +254 7XX XXX XXX"
+        placeholderTextColor="#9CA3AF"
+        value={mobileNumber}
+        onChangeText={(value) => {
+          setMobileNumber(value);
+          resetQuote();
+        }}
+        keyboardType="phone-pad"
+        autoCapitalize="none"
+      />
+
+      <Text style={styles.label}>Amount</Text>
+      <View style={styles.amountRow}>
+        <Text style={styles.currencyTag}>{fromCurrency}</Text>
+        <TextInput
+          style={styles.amountInput}
+          placeholder="0.00"
+          placeholderTextColor="#9CA3AF"
+          value={amount}
+          onChangeText={(value) => {
+            setAmount(value);
+            resetQuote();
+          }}
+          keyboardType="decimal-pad"
+        />
+      </View>
+
+      <View style={{ backgroundColor: '#F0F7F0', borderWidth: 1, borderColor: '#2F6B2F1A', borderRadius: 16, padding: 14, marginTop: 8, marginBottom: 18 }}>
+        <Text style={{ fontSize: 12, color: '#6B7280', marginBottom: 4 }}>Transfer preview</Text>
+        <Text style={{ fontSize: 16, fontWeight: '700', color: '#111827' }}>
+          {quote ? `${quote.fromCurrency} ${Number(amount || 0).toFixed(2)} → ${destinationCurrency} ${Number(quote.toAmountMinor / 100).toFixed(2)}` : 'Request a quote to preview the payout'}
+        </Text>
+        {quote && (
+          <Text style={{ fontSize: 13, color: '#6B7280', marginTop: 4 }}>
+            Rate: 1 {quote.fromCurrency} = {Number(quote.rate).toFixed(2)} {quote.toCurrency}
+          </Text>
+        )}
+        {quote && (
+          <Text style={{ fontSize: 13, color: '#6B7280', marginTop: 4 }}>
+            Provider: {selectedProvider?.name ?? 'Mobile money'} · Network fee included in demo flow
+          </Text>
+        )}
+      </View>
+
+      <TouchableOpacity style={styles.reviewBtn} onPress={quote ? handleConfirm : handleQuote} activeOpacity={0.85}>
+        {fxQuote.isPending
+          ? <ActivityIndicator color="#FFFFFF" />
+          : (
+            <>
+              <Text style={styles.reviewBtnText}>{quote ? 'Confirm Transfer' : 'Get FX Quote'}</Text>
+              <Ionicons name="arrow-forward" size={18} color="#FFFFFF" />
+            </>
+          )}
+      </TouchableOpacity>
+
+      <Modal visible={showSummary} transparent animationType="slide">
+        <View style={styles.overlay}>
+          <View style={styles.sheet}>
+            <Text style={styles.sheetTitle}>Confirm International Transfer</Text>
+
+            <View style={styles.summaryRow}>
+              <Text style={styles.summaryLabel}>Destination</Text>
+              <Text style={styles.summaryValue}>{destinationCountry}</Text>
+            </View>
+            <View style={styles.summaryRow}>
+              <Text style={styles.summaryLabel}>Provider</Text>
+              <Text style={styles.summaryValue}>{selectedProvider?.name ?? 'Mobile money'}</Text>
+            </View>
+            <View style={styles.summaryRow}>
+              <Text style={styles.summaryLabel}>Recipient</Text>
+              <Text style={styles.summaryValue}>{mobileNumber}</Text>
+            </View>
+            <View style={[styles.summaryRow, styles.summaryRowHighlight]}>
+              <Text style={styles.summaryLabel}>Send</Text>
+              <Text style={styles.summaryAmountValue}>{fromCurrency} {Number(amount || 0).toFixed(2)}</Text>
+            </View>
+            <View style={styles.summaryRow}>
+              <Text style={styles.summaryLabel}>Receive</Text>
+              <Text style={styles.summaryValue}>{estimatedReceive}</Text>
+            </View>
+
+            <TouchableOpacity style={styles.confirmBtn} onPress={handleConfirm} activeOpacity={0.85}>
+              <Text style={styles.confirmBtnText}>Confirm Demo Transfer</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.cancelBtn} onPress={() => setShowSummary(false)}>
+              <Text style={styles.cancelBtnText}>Back</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+    </ScrollView>
+  );
+}
+
 export default function SendScreen() {
   const router = useRouter();
   const [step, setStep] = useState<Step>('select_method');
   const [method, setMethod] = useState<SendMethod | null>(null);
-  const [country, setCountry] = useState<Country | null>(null);
-  const [provider, setProvider] = useState('');
-  const [phone, setPhone] = useState('');
-  const [amount, setAmount] = useState('');
 
   function handleBack() {
-    if (step === 'form' && method === 'international') {
-      setStep('select_country');
-    } else if (step === 'select_country') {
-      setStep('select_method');
-    } else if (step === 'form') {
+    if (step === 'form') {
       setStep('select_method');
     } else {
       router.back();
@@ -298,26 +554,13 @@ export default function SendScreen() {
 
   function handleMethodSelect(id: string) {
     setMethod(id as SendMethod);
-    if (id === 'to_user') {
-      setStep('form');
-    } else {
-      setStep('select_country');
-    }
-  }
-
-  function handleCountrySelect(c: Country) {
-    setCountry(c);
-    setProvider('');
     setStep('form');
   }
 
   const stepTitle: Record<Step, string> = {
     select_method: 'Send Money',
-    select_country: 'Select Country',
-    form: method === 'to_user' ? 'Send to User' : `Send to ${country?.name ?? ''}`,
+    form: method === 'international' ? 'International Transfer' : 'Send to User',
   };
-
-  const providers = country ? MOBILE_MONEY_PROVIDERS[country.code] ?? [] : [];
 
   return (
     <ActionScreen title={stepTitle[step]} onBack={handleBack}>
@@ -325,72 +568,12 @@ export default function SendScreen() {
         <MethodSelector methods={SEND_METHODS} onSelect={handleMethodSelect} />
       )}
 
-      {step === 'select_country' && (
-        <CountryPicker onSelect={handleCountrySelect} selected={country?.code} />
-      )}
-
       {step === 'form' && method === 'to_user' && (
         <P2PSendForm onDone={() => { setStep('select_method'); setMethod(null); }} />
       )}
 
-      {step === 'form' && method === 'international' && country && (
-        <View className="gap-4">
-          <View className="flex-row items-center gap-3 bg-[#2F6B2F]/5 rounded-xl p-3 mb-1">
-            <Text style={{ fontSize: 24 }}>{country.flag}</Text>
-            <View>
-              <Text className="text-gray-900 text-sm font-semibold">{country.name}</Text>
-              <Text className="text-gray-400 text-xs">{country.currency}</Text>
-            </View>
-            <TouchableOpacity className="ml-auto" onPress={() => setStep('select_country')}>
-              <Text className="text-[#2F6B2F] text-xs font-medium">Change</Text>
-            </TouchableOpacity>
-          </View>
-
-          <View className="gap-2">
-            <Text className="text-gray-700 text-sm font-medium">Mobile Money Provider</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
-              {providers.map((p) => (
-                <TouchableOpacity
-                  key={p.id}
-                  onPress={() => setProvider(p.id)}
-                  className={`px-4 py-2 rounded-full border ${
-                    provider === p.id ? 'bg-[#2F6B2F] border-[#2F6B2F]' : 'bg-white border-gray-200'
-                  }`}
-                >
-                  <Text className={`text-sm font-medium ${provider === p.id ? 'text-white' : 'text-gray-700'}`}>
-                    {p.name}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          </View>
-
-          <View className="gap-1">
-            <Text className="text-gray-700 text-sm font-medium">Recipient Phone Number</Text>
-            <TextInput
-              className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3.5 text-gray-900 text-base"
-              placeholder="e.g. 0700 000 000"
-              placeholderTextColor="#9CA3AF"
-              keyboardType="phone-pad"
-              value={phone}
-              onChangeText={setPhone}
-            />
-          </View>
-          <View className="gap-1">
-            <Text className="text-gray-700 text-sm font-medium">Amount ({country.currency})</Text>
-            <TextInput
-              className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3.5 text-gray-900 text-base"
-              placeholder="0.00"
-              placeholderTextColor="#9CA3AF"
-              keyboardType="decimal-pad"
-              value={amount}
-              onChangeText={setAmount}
-            />
-          </View>
-          <TouchableOpacity className="bg-[#2F6B2F] rounded-xl py-4 items-center mt-2">
-            <Text className="text-white font-bold text-base">Continue</Text>
-          </TouchableOpacity>
-        </View>
+      {step === 'form' && method === 'international' && (
+        <InternationalTransferForm onDone={() => { setStep('select_method'); setMethod(null); }} />
       )}
     </ActionScreen>
   );
@@ -497,10 +680,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    shadowColor: '#2F6B2F',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
+    boxShadow: '0px 4px 8px rgba(47, 107, 47, 0.25)',
     elevation: 4,
     marginBottom: 32,
   },

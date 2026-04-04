@@ -10,7 +10,16 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 
 import { useTransactionsQuery } from '@/src/hooks/useQueries';
+import { useEnrichedTransactions } from '@/src/hooks/useEnrichedTransactions';
 import { formatCurrency } from '@/src/lib/utils/currency';
+import {
+  isCredit,
+  statusBg,
+  statusText,
+  txIcon,
+  txIconColor,
+  txLabel,
+} from '@/src/lib/utils/transaction-ui';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -21,71 +30,49 @@ type Tx = {
   amountMinor: number;
   currency: string;
   status: string;
+  occurredAt?: string;
   createdAt?: string;
   description?: string;
   counterparty?: string;
+  counterpartyUserId?: string;
+  counterpartyLabel?: string;
+  source?: string;
   reference?: string;
 };
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const TX_TYPES = ['ALL', 'TOPUP', 'SEND', 'PAYMENT', 'REFUND', 'WITHDRAWAL'];
-const TX_STATUSES = ['ALL', 'PENDING', 'COMPLETED', 'FAILED'];
+const TX_STATUSES = ['ALL', 'PENDING', 'COMPLETED', 'FAILED', 'CANCELLED', 'EXPIRED'];
 const DATE_RANGES = ['All Time', 'Today', 'This Week', 'This Month'];
 const PAGE_SIZE = 10;
 
+const STATUS_FILTER_LABELS: Record<string, string> = {
+  ALL: 'All',
+  PENDING: 'Pending',
+  COMPLETED: 'Completed',
+  FAILED: 'Failed',
+  CANCELLED: 'Cancelled',
+  EXPIRED: 'Expired',
+};
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-function txIcon(type: string): React.ComponentProps<typeof Ionicons>['name'] {
-  switch (type?.toUpperCase()) {
-    case 'TOPUP':      return 'arrow-down-circle';
-    case 'SEND':       return 'paper-plane';
-    case 'PAYMENT':    return 'card';
-    case 'REFUND':     return 'refresh-circle';
-    case 'WITHDRAWAL': return 'arrow-up-circle';
-    default:           return 'ellipse';
+function matchesStatusFilter(status: string, filter: string) {
+  if (filter === 'ALL') {
+    return true;
   }
+
+  return status?.toUpperCase() === filter;
 }
 
-function txIconColor(type: string, direction?: string) {
-  if (direction === 'CREDIT') return '#16A34A';
-  if (direction === 'DEBIT')  return '#DC2626';
-  switch (type?.toUpperCase()) {
-    case 'TOPUP':   return '#16A34A';
-    case 'REFUND':  return '#2563EB';
-    case 'SEND':
-    case 'WITHDRAWAL': return '#DC2626';
-    default: return '#6B7280';
-  }
-}
-
-function statusBg(status: string) {
-  switch (status?.toUpperCase()) {
-    case 'COMPLETED': return 'bg-green-100';
-    case 'PENDING':   return 'bg-amber-100';
-    case 'FAILED':    return 'bg-red-100';
-    default:          return 'bg-gray-100';
-  }
-}
-
-function statusText(status: string) {
-  switch (status?.toUpperCase()) {
-    case 'COMPLETED': return 'text-green-700';
-    case 'PENDING':   return 'text-amber-700';
-    case 'FAILED':    return 'text-red-700';
-    default:          return 'text-gray-600';
-  }
-}
-
-function isCredit(tx: Tx) {
-  if (tx.direction) return tx.direction === 'CREDIT';
-  const t = tx.type?.toUpperCase();
-  return t === 'TOPUP' || t === 'REFUND';
+function txTime(tx: Tx) {
+  return tx.occurredAt ?? tx.createdAt;
 }
 
 function withinDateRange(tx: Tx, range: string) {
-  if (range === 'All Time' || !tx.createdAt) return true;
-  const date = new Date(tx.createdAt);
+  const timestamp = txTime(tx);
+  if (range === 'All Time' || !timestamp) return true;
+  const date = new Date(timestamp);
   const now = new Date();
   if (range === 'Today') {
     return date.toDateString() === now.toDateString();
@@ -111,6 +98,7 @@ function TransactionDetailModal({ tx, onClose }: { tx: Tx | null; onClose: () =>
   if (!tx) return null;
   const credit = isCredit(tx);
   const color = txIconColor(tx.type, tx.direction);
+  const counterpartyValue = tx.counterpartyLabel ?? tx.counterparty ?? tx.counterpartyUserId ?? '';
 
   return (
     <Modal visible={!!tx} transparent animationType="slide" onRequestClose={onClose}>
@@ -129,7 +117,7 @@ function TransactionDetailModal({ tx, onClose }: { tx: Tx | null; onClose: () =>
             <View style={{ backgroundColor: color + '18', borderRadius: 999, padding: 14, marginBottom: 10 }}>
               <Ionicons name={txIcon(tx.type)} size={32} color={color} />
             </View>
-            <Text className="text-gray-500 text-xs uppercase tracking-widest font-medium mb-1">{tx.type}</Text>
+            <Text className="text-gray-500 text-xs uppercase tracking-widest font-medium mb-1">{txLabel(tx.type)}</Text>
             <Text style={{ color }} className="text-3xl font-bold">
               {credit ? '+' : '−'} {formatCurrency(tx.amountMinor, tx.currency)}
             </Text>
@@ -142,10 +130,11 @@ function TransactionDetailModal({ tx, onClose }: { tx: Tx | null; onClose: () =>
           <DetailRow label="Direction" value={tx.direction ?? (credit ? 'CREDIT' : 'DEBIT')} />
           <DetailRow label="Currency" value={tx.currency} />
           {tx.description && <DetailRow label="Description" value={tx.description} />}
-          {tx.counterparty && <DetailRow label="Counterparty" value={tx.counterparty} />}
+          {!!counterpartyValue && <DetailRow label="Counterparty" value={counterpartyValue} />}
+          {tx.source && <DetailRow label="Source" value={tx.source} />}
           {tx.reference && <DetailRow label="Reference" value={tx.reference} mono />}
-          {tx.createdAt && (
-            <DetailRow label="Date" value={new Date(tx.createdAt).toLocaleString()} />
+          {txTime(tx) && (
+            <DetailRow label="Date" value={new Date(txTime(tx)!).toLocaleString()} />
           )}
           <DetailRow label="ID" value={tx.id} mono />
         </View>
@@ -160,10 +149,12 @@ function FilterChips({
   options,
   selected,
   onSelect,
+  labelForOption,
 }: {
   options: string[];
   selected: string;
   onSelect: (v: string) => void;
+  labelForOption?: (value: string) => string;
 }) {
   return (
     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }}>
@@ -173,7 +164,9 @@ function FilterChips({
           onPress={() => onSelect(o)}
           className={`px-3 py-1.5 rounded-full border ${selected === o ? 'bg-[#2F6B2F] border-[#2F6B2F]' : 'bg-white border-gray-200'}`}
         >
-          <Text className={`text-xs font-semibold ${selected === o ? 'text-white' : 'text-gray-600'}`}>{o}</Text>
+          <Text className={`text-xs font-semibold ${selected === o ? 'text-white' : 'text-gray-600'}`}>
+            {labelForOption ? labelForOption(o) : o}
+          </Text>
         </TouchableOpacity>
       ))}
     </ScrollView>
@@ -185,18 +178,25 @@ function FilterChips({
 function TransactionItem({ tx, onPress }: { tx: Tx; onPress: () => void }) {
   const credit = isCredit(tx);
   const color = txIconColor(tx.type, tx.direction);
+  const subtitle =
+    tx.counterpartyLabel ??
+    tx.counterparty ??
+    (tx.counterpartyUserId ? 'Resolving user...' : undefined) ??
+    tx.description ??
+    tx.currency;
   return (
     <TouchableOpacity
       onPress={onPress}
+      activeOpacity={0.75}
       className="flex-row items-center bg-white px-4 py-3 border-b border-gray-100"
     >
       <View style={{ backgroundColor: color + '18', borderRadius: 999, padding: 9, marginRight: 12 }}>
         <Ionicons name={txIcon(tx.type)} size={18} color={color} />
       </View>
       <View className="flex-1">
-        <Text className="text-gray-800 text-sm font-semibold capitalize">{tx.type}</Text>
+        <Text className="text-gray-800 text-sm font-semibold">{txLabel(tx.type)}</Text>
         <Text className="text-gray-400 text-xs mt-0.5" numberOfLines={1}>
-          {tx.counterparty ?? tx.description ?? tx.currency}
+          {subtitle}
         </Text>
       </View>
       <View className="items-end ml-2">
@@ -207,6 +207,7 @@ function TransactionItem({ tx, onPress }: { tx: Tx; onPress: () => void }) {
           <Text className={`text-[10px] font-semibold uppercase ${statusText(tx.status)}`}>{tx.status}</Text>
         </View>
       </View>
+      <Ionicons name="chevron-forward" size={14} color="#9CA3AF" style={{ marginLeft: 8 }} />
     </TouchableOpacity>
   );
 }
@@ -214,22 +215,23 @@ function TransactionItem({ tx, onPress }: { tx: Tx; onPress: () => void }) {
 // ─── Transactions Screen ──────────────────────────────────────────────────────
 
 export default function TransactionsScreen() {
-  const { data = [], isLoading } = useTransactionsQuery();
+  const { data, isLoading } = useTransactionsQuery(true); // Enable query when viewing transactions
 
-  const [typeFilter, setTypeFilter]     = useState('ALL');
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [dateFilter, setDateFilter]     = useState('All Time');
   const [page, setPage]                 = useState(1);
   const [selected, setSelected]         = useState<Tx | null>(null);
 
+  const transactions = useMemo(() => (Array.isArray(data) ? (data as Tx[]) : []), [data]);
+  const enrichedTransactions = useEnrichedTransactions(transactions);
+
   const filtered = useMemo(() => {
-    return (data as Tx[]).filter((tx) => {
-      const matchType   = typeFilter === 'ALL'   || tx.type?.toUpperCase()   === typeFilter;
-      const matchStatus = statusFilter === 'ALL' || tx.status?.toUpperCase() === statusFilter;
+    return enrichedTransactions.filter((tx) => {
+      const matchStatus = matchesStatusFilter(tx.status, statusFilter);
       const matchDate   = withinDateRange(tx, dateFilter);
-      return matchType && matchStatus && matchDate;
+      return matchStatus && matchDate;
     });
-  }, [data, typeFilter, statusFilter, dateFilter]);
+  }, [enrichedTransactions, statusFilter, dateFilter]);
 
   const paginated = filtered.slice(0, page * PAGE_SIZE);
   const hasMore   = paginated.length < filtered.length;
@@ -239,14 +241,21 @@ export default function TransactionsScreen() {
       {/* Sticky filters */}
       <View className="bg-white border-b border-gray-100 px-4 pt-3 pb-3 gap-2">
         <Text className="text-gray-900 text-2xl font-bold mb-1">Transactions</Text>
-        <FilterChips options={TX_TYPES}    selected={typeFilter}   onSelect={(v) => { setTypeFilter(v);   setPage(1); }} />
-        <FilterChips options={TX_STATUSES} selected={statusFilter} onSelect={(v) => { setStatusFilter(v); setPage(1); }} />
+        <Text className="text-gray-500 text-xs mb-1">
+          {isLoading ? 'Loading transactions...' : `${filtered.length} result${filtered.length === 1 ? '' : 's'}`}
+        </Text>
+        <FilterChips
+          options={TX_STATUSES}
+          selected={statusFilter}
+          onSelect={(v) => { setStatusFilter(v); setPage(1); }}
+          labelForOption={(value) => STATUS_FILTER_LABELS[value] ?? txLabel(value)}
+        />
         <FilterChips options={DATE_RANGES} selected={dateFilter}   onSelect={(v) => { setDateFilter(v);   setPage(1); }} />
       </View>
 
       <FlatList
         data={paginated}
-        keyExtractor={(tx) => tx.id}
+        keyExtractor={(tx, index) => `${tx.id}-${tx.createdAt ?? tx.occurredAt ?? index}`}
         renderItem={({ item }) => (
           <TransactionItem tx={item} onPress={() => setSelected(item)} />
         )}
@@ -256,6 +265,9 @@ export default function TransactionsScreen() {
             <Text className="text-gray-400 text-sm mt-3">
               {isLoading ? 'Loading…' : 'No transactions found'}
             </Text>
+            {!isLoading && (
+              <Text className="text-gray-400 text-xs mt-1">Try a different date or status filter.</Text>
+            )}
           </View>
         }
         ListFooterComponent={
