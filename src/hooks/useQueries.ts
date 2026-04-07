@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { api, ChangePasswordPayload, UpdateProfilePayload } from '@/src/lib/api/services';
 import {
+  AgentDepositRequest,
   FxSwapQuoteRequest,
   FxSwapExecuteRequest,
   MobileMoneyDepositRequest,
@@ -24,6 +25,17 @@ export const useProfileQuery = (enabled = true) => {
     enabled: enabled && isAuthenticated,
     staleTime: 5 * 60 * 1000, // 5 minutes
     gcTime: 10 * 60 * 1000, // 10 minutes
+  });
+};
+
+export const useSessionQuery = (enabled = true) => {
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  return useQuery({
+    queryKey: ['session'],
+    queryFn: api.getSessionUser,
+    enabled: enabled && isAuthenticated,
+    staleTime: 5 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
   });
 };
 
@@ -71,6 +83,12 @@ export const useLookupUserMutation = () => {
   });
 };
 
+export const useLookupMerchantMutation = () => {
+  return useMutation({
+    mutationFn: (merchantIdentifier: string) => api.lookupMerchantByCodeOrId(merchantIdentifier),
+  });
+};
+
 export const useSendP2PMutation = () => {
   const queryClient = useQueryClient();
   return useMutation({
@@ -105,6 +123,17 @@ export const useMobileMoneyDepositMutation = () => {
   return useMutation({
     mutationFn: (payload: MobileMoneyDepositRequest) => api.initiateMobileMoneyDeposit(payload),
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['transactions'] });
+    },
+  });
+};
+
+export const useAgentDepositMutation = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: AgentDepositRequest) => api.depositViaAgent(payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['balances'] });
       queryClient.invalidateQueries({ queryKey: ['transactions'] });
     },
   });

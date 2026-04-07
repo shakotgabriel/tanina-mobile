@@ -26,6 +26,8 @@ const VALIDATION_TEXT1 = new Set([
   'Enter agent user ID',
   'Cashout agent ID is required',
   'Withdrawal agent ID is required',
+  'Deposit agent code is required',
+  'Withdrawal agent code is required',
   'Select country first',
   'Enter a valid OTP',
   'Enter meter/account number',

@@ -1,63 +1,49 @@
 import { useMemo } from 'react';
-import { useQueries } from '@tanstack/react-query';
-
-import { api } from '@/src/lib/api/services';
 
 type CounterpartyTx = {
   counterpartyUserId?: string | null;
+  counterpartyDisplayName?: string | null;
+  counterparty?: string | null;
+  source?: string | null;
+  description?: string | null;
 };
 
 type EnrichedTx<T> = T & {
   counterpartyLabel?: string;
 };
 
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+const isUuidLike = (value?: string | null): value is string => {
+  if (!value) {
+    return false;
+  }
+  return UUID_REGEX.test(value.trim());
+};
+
+const deriveCounterpartyLabel = (tx: CounterpartyTx): string | undefined => {
+  const displayName = tx.counterpartyDisplayName?.trim();
+  if (displayName) {
+    return displayName;
+  }
+
+  const counterparty = tx.counterparty?.trim();
+  if (counterparty && !isUuidLike(counterparty)) {
+    return counterparty;
+  }
+
+  return undefined;
+};
+
 export function useEnrichedTransactions<T extends CounterpartyTx>(transactions: T[]): EnrichedTx<T>[] {
-  const uniqueCounterpartyIds = useMemo(
-    () =>
-      Array.from(
-        new Set(
-          transactions
-            .map((tx) => tx.counterpartyUserId)
-            .filter((value): value is string => !!value)
-        )
-      ),
-    [transactions]
-  );
-
-  const counterpartyQueries = useQueries({
-    queries: uniqueCounterpartyIds.map((userId) => ({
-      queryKey: ['transaction-counterparty', userId],
-      queryFn: () => api.getUserById(userId),
-      staleTime: 10 * 60 * 1000,
-      gcTime: 30 * 60 * 1000,
-    })),
-  });
-
-  const counterpartyLabels = useMemo(() => {
-    const labels = new Map<string, string>();
-
-    counterpartyQueries.forEach((query, index) => {
-      const userId = uniqueCounterpartyIds[index];
-      const user = query.data;
-      if (!userId || !user) {
-        return;
-      }
-
-      const name = `${user.firstName ?? ''} ${user.lastName ?? ''}`.trim();
-      labels.set(userId, name || user.email || userId);
-    });
-
-    return labels;
-  }, [counterpartyQueries, uniqueCounterpartyIds]);
-
   return useMemo(
     () =>
-      transactions.map((tx) => ({
-        ...tx,
-        counterpartyLabel: tx.counterpartyUserId
-          ? counterpartyLabels.get(tx.counterpartyUserId)
-          : undefined,
-      })),
-    [transactions, counterpartyLabels]
+      transactions.map((tx) => {
+        return {
+          ...tx,
+          counterpartyLabel: deriveCounterpartyLabel(tx),
+        };
+      }),
+    [transactions]
   );
 }

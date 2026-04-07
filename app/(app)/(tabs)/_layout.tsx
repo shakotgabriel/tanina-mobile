@@ -2,7 +2,7 @@ import { Image, Text, View } from 'react-native';
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useProfileQuery } from '@/src/hooks/useQueries';
+import { useSessionQuery } from '@/src/hooks/useQueries';
 
 type HeaderProps = {
   user: {
@@ -87,11 +87,11 @@ function Header({ user, isLoading }: HeaderProps) {
 }
 
 export default function TabsLayout() {
-  const { data: profile, isLoading } = useProfileQuery(true); // Always enable in header to display user info
+  const { data: session, isLoading } = useSessionQuery(true); // Always enable in header to display user info
   
-  const firstName = (profile as any)?.firstName ?? '';
-  const lastName = (profile as any)?.lastName ?? '';
-  const email = (profile as any)?.email ?? '';
+  const firstName = (session as any)?.firstName ?? '';
+  const lastName = (session as any)?.lastName ?? '';
+  const email = (session as any)?.email ?? '';
   
   const fallbackName = email ? email.split('@')[0] : 'User';
   const fullName = `${firstName}${lastName ? ` ${lastName}` : ''}`.trim() || fallbackName;

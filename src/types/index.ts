@@ -34,6 +34,12 @@ export type AuthResponse = {
   permissions: string[];
 };
 
+export type AuthMeResponse = {
+  userId: UUID;
+  email: string;
+  role?: string;
+};
+
 export type LoginRequest = {
   email: string;
   password: string;
@@ -256,49 +262,101 @@ export type MobileMoneyDepositRequest = {
   currency: string;
   phoneNumber: string;
   provider: string;
+  userId?: UUID;
 };
 
+export type MobileMoneyDepositStatus = "PENDING" | "SUBMITTED" | "SUCCESS" | "FAILED";
+
 export type MobileMoneyDepositDTO = {
-  id: UUID;
+  depositId: UUID;
   userId: UUID;
+  provider: string;
+  providerRef?: string;
+  providerTxnId?: string;
   amountMinor: number;
   currency: string;
-  phoneNumber: string;
-  provider: string;
-  status: "PENDING" | "SUCCESS" | "FAILED";
-  externalReference?: string;
+  status: MobileMoneyDepositStatus;
+  failureReason?: string;
+  callbackReceivedAt?: ISODateTime;
+  creditedAt?: ISODateTime;
   createdAt: ISODateTime;
-  updatedAt: ISODateTime;
+  // Legacy aliases retained for compatibility with older UI code.
+  id?: UUID;
+  externalReference?: string;
+  updatedAt?: ISODateTime;
 };
 
 export type BillPayRequest = {
-  billType: string;
-  accountNumber: string;
+  utilityProvider?: string;
+  meterNumber?: string;
+  accountNumber?: string;
   amountMinor: number;
   currency: string;
-  provider: string;
+  userId?: UUID;
+  // Backend/legacy aliases retained for compatibility.
+  billerCode?: string;
+  customerRef?: string;
+  provider?: string;
+  billType?: string;
+};
+
+export type BillPaymentStatus = "PENDING" | "SUBMITTED" | "SUCCESS" | "FAILED" | "EXPIRED";
+
+export type BillPaymentDTO = {
+  id: UUID;
+  userId: UUID;
+  billerCode: string;
+  customerRef: string;
+  amountMinor: number;
+  currency: string;
+  holdId?: UUID;
+  providerRef?: string;
+  status: BillPaymentStatus;
+  callbackReceivedAt?: ISODateTime;
+  expiresAt: ISODateTime;
+  createdAt: ISODateTime;
+  // Legacy aliases retained for compatibility with older UI code.
+  accountNumber?: string;
+  provider?: string;
+};
+
+export type AgentDepositRequest = {
+  agentId: UUID;
+  amountMinor: number;
+  currency: string;
+  note?: string;
 };
 
 export type CashoutInitiateRequest = {
   amountMinor: number;
   currency: string;
-  agentId: UUID;
+  userId?: UUID;
+  agentId?: UUID;
+  agentUserId?: UUID;
 };
+
+export type CashoutStatus = "PENDING" | "CONFIRMED" | "CANCELLED" | "EXPIRED";
 
 export type CashoutDTO = {
   id: UUID;
   userId: UUID;
-  agentId: UUID;
+  agentUserId: UUID;
   amountMinor: number;
   currency: string;
-  status: "INITIATED" | "CONFIRMED" | "COMPLETED" | "FAILED" | "EXPIRED";
-  confirmationCode?: string;
+  holdId?: UUID;
+  otpHash?: string;
+  otpAttempts?: number;
+  status: CashoutStatus;
+  expiresAt: ISODateTime;
   createdAt: ISODateTime;
-  updatedAt: ISODateTime;
+  // Legacy aliases retained for compatibility with older UI code.
+  agentId?: UUID;
+  confirmationCode?: string;
 };
 
 export type CashoutConfirmRequest = {
-  confirmationCode: string;
+  otp: string;
+  confirmationCode?: string;
 };
 
 // Withdrawal naming aliases kept for product language consistency on the frontend.
@@ -307,23 +365,35 @@ export type WithdrawalDTO = CashoutDTO;
 export type WithdrawalConfirmRequest = CashoutConfirmRequest;
 
 export type MerchantIntentRequest = {
-  merchantId: UUID;
+  merchantId?: UUID;
   amountMinor: number;
   currency: string;
   description?: string;
+  payerUserId?: UUID;
+  merchantUserId?: UUID;
+  reference?: string;
 };
+
+export type MerchantIntentStatus = "PENDING" | "AUTHORIZED" | "CAPTURED" | "CANCELLED" | "EXPIRED";
+export type MerchantCaptureRole = "MERCHANT" | "GATEWAY" | "AUTO";
 
 export type MerchantIntentDTO = {
   id: UUID;
-  merchantId: UUID;
-  customerId?: UUID;
+  payerUserId: UUID;
+  merchantUserId: UUID;
   amountMinor: number;
   currency: string;
-  description?: string;
-  status: "CREATED" | "AUTHORIZED" | "CAPTURED" | "CANCELLED" | "EXPIRED";
+  payerCurrency: string;
+  fxSnapshotId?: UUID;
   holdId?: UUID;
-  createdAt: ISODateTime;
+  status: MerchantIntentStatus;
+  captureRole: MerchantCaptureRole;
   expiresAt: ISODateTime;
+  createdAt: ISODateTime;
+  // Legacy aliases retained for compatibility with older UI code.
+  merchantId?: UUID;
+  customerId?: UUID;
+  description?: string;
 };
 
 export type MerchantAuthorizeRequest = {
@@ -342,6 +412,7 @@ export type UnifiedTransactionDTO = {
   amountMinor: number;
   currency: string;
   counterpartyUserId?: UUID | null;
+  counterpartyDisplayName?: string | null;
   description?: string | null;
   occurredAt?: ISODateTime | null;
   source?: string;

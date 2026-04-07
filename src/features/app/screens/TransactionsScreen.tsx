@@ -13,7 +13,9 @@ import { useTransactionsQuery } from '@/src/hooks/useQueries';
 import { useEnrichedTransactions } from '@/src/hooks/useEnrichedTransactions';
 import { formatCurrency } from '@/src/lib/utils/currency';
 import {
+  counterpartyDisplay,
   isCredit,
+  sourceDisplay,
   statusBg,
   statusText,
   txIcon,
@@ -21,6 +23,7 @@ import {
   txLabel,
   directionLabel,
   statusLabel,
+  txTitle,
   txSubtitle,
 } from '@/src/lib/utils/transaction-ui';
 import { EmptyState, Skeleton } from '@/src/components/common';
@@ -39,6 +42,7 @@ type Tx = {
   description?: string;
   counterparty?: string;
   counterpartyUserId?: string;
+  counterpartyDisplayName?: string;
   counterpartyLabel?: string;
   source?: string;
   reference?: string;
@@ -102,7 +106,8 @@ function TransactionDetailModal({ tx, onClose }: { tx: Tx | null; onClose: () =>
   if (!tx) return null;
   const credit = isCredit(tx);
   const color = txIconColor(tx.type, tx.direction);
-  const counterpartyValue = tx.counterpartyLabel ?? tx.counterparty ?? tx.counterpartyUserId ?? '';
+  const counterpartyValue = counterpartyDisplay(tx) ?? '';
+  const sourceValue = sourceDisplay(tx);
 
   return (
     <Modal visible={!!tx} transparent animationType="slide" onRequestClose={onClose}>
@@ -135,7 +140,7 @@ function TransactionDetailModal({ tx, onClose }: { tx: Tx | null; onClose: () =>
           <DetailRow label="Currency" value={tx.currency} />
           {tx.description && <DetailRow label="Description" value={tx.description} />}
           {!!counterpartyValue && <DetailRow label="Counterparty" value={counterpartyValue} />}
-          {tx.source && <DetailRow label="Source" value={tx.source} />}
+          {sourceValue && <DetailRow label="Source" value={sourceValue} />}
           {tx.reference && <DetailRow label="Reference" value={tx.reference} mono />}
           {txTime(tx) && (
             <DetailRow label="Date" value={new Date(txTime(tx)!).toLocaleString()} />
@@ -193,7 +198,7 @@ function TransactionItem({ tx, onPress }: { tx: Tx; onPress: () => void }) {
         <Ionicons name={txIcon(tx.type)} size={18} color={color} />
       </View>
       <View className="flex-1">
-        <Text className="text-gray-800 text-sm font-semibold">{txLabel(tx.type)}</Text>
+        <Text className="text-gray-800 text-sm font-semibold">{txTitle(tx)}</Text>
         <Text className="text-gray-400 text-xs mt-0.5" numberOfLines={1}>
           {subtitle}
         </Text>

@@ -19,6 +19,7 @@ export const ENDPOINTS = {
   },
   users: {
     create: `${API_V1}/users`,
+    me: `${API_V1}/users/me`,
     byId: (userId: string) => `${API_V1}/users/${userId}`,
     transactionHistory: (userId: string) => `${API_V1}/users/${userId}/transactions/history`,
     byEmail: (email: string) => `${API_V1}/users/email/${encodeURIComponent(email)}`,
