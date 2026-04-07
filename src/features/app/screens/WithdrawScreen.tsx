@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useMemo, useState } from 'react';
+import { Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { notify } from '@/src/lib/utils/notify';
@@ -9,41 +9,55 @@ import ActionScreen from '@/src/components/layout/ActionScreen';
 import MethodSelector, { Method } from '@/src/features/app/components/MethodSelector';
 import CountryPicker, {
   Country,
-  MOBILE_MONEY_PROVIDERS,
 } from '@/src/features/app/components/CountryPicker';
-import { useCashoutInitiateMutation, useCashoutConfirmMutation } from '@/src/hooks/useQueries';
+import { useFormValidation } from '@/src/hooks/useFormValidation';
+import { useWithdrawalInitiateMutation, useWithdrawalConfirmMutation } from '@/src/hooks/useQueries';
 
 type Step = 'select_method' | 'select_country' | 'form';
-type WithdrawMethod = 'mobile_money';
+type WithdrawMethod = 'agent';
 
 const WITHDRAW_METHODS: Method[] = [
   {
-    id: 'mobile_money',
-    icon: 'phone-portrait-outline',
-    title: 'Cashout',
-    description: 'Initiate and confirm cashout with OTP',
+    id: 'agent',
+    icon: 'person-outline',
+    title: 'Withdraw via Agent',
+    description: 'Initiate and confirm withdrawal with OTP',
   },
 ];
 
 export default function WithdrawScreen() {
   const router = useRouter();
-  const initiateCashout = useCashoutInitiateMutation();
-  const confirmCashout = useCashoutConfirmMutation();
+  const initiateWithdrawal = useWithdrawalInitiateMutation();
+  const confirmWithdrawal = useWithdrawalConfirmMutation();
 
   const [step, setStep] = useState<Step>('select_method');
   const [method, setMethod] = useState<WithdrawMethod | null>(null);
   const [country, setCountry] = useState<Country | null>(null);
-  const [provider, setProvider] = useState('');
   const [agentUserId, setAgentUserId] = useState('');
-  const [phone, setPhone] = useState('');
   const [amount, setAmount] = useState('');
   const [otp, setOtp] = useState('');
-  const [cashoutId, setCashoutId] = useState<string | null>(null);
+  const [withdrawalId, setWithdrawalId] = useState<string | null>(null);
   const [otpStep, setOtpStep] = useState(false);
   const [success, setSuccess] = useState(false);
 
+  const formValues = useMemo(
+    () => ({ agentUserId, amount, otp }),
+    [agentUserId, amount, otp]
+  );
+  const { errors, validateField, touchField } = useFormValidation(
+    {
+      agentUserId: (value) => (String(value).trim() ? null : 'Withdrawal agent code is required'),
+      amount: (value) => {
+        const parsed = Number(value);
+        return Number.isFinite(parsed) && parsed > 0 ? null : 'Amount must be greater than 0';
+      },
+      otp: (value) => (String(value).trim().length >= 4 ? null : 'Enter a valid OTP'),
+    },
+    formValues
+  );
+
   function handleBack() {
-    if (step === 'form' && method === 'mobile_money') {
+    if (step === 'form' && method === 'agent') {
       setStep('select_country');
     } else if (step === 'select_country') {
       setStep('select_method');
@@ -61,26 +75,15 @@ export default function WithdrawScreen() {
 
   function handleCountrySelect(c: Country) {
     setCountry(c);
-    setProvider('');
     setStep('form');
   }
 
-  const handleMobileMoneyWithdraw = () => {
-    if (!amount || isNaN(Number(amount)) || Number(amount) <= 0) {
-      notify.validation('Enter a valid amount');
-      return;
-    }
-    if (!phone.trim()) {
-      notify.validation('Enter a phone number');
-      return;
-    }
-    if (!provider) {
-      notify.validation('Select a provider');
-      return;
-    }
+  const handleAgentWithdraw = () => {
+    const agentError = validateField('agentUserId', agentUserId);
+    const amountError = validateField('amount', amount);
 
-    if (!agentUserId.trim()) {
-      notify.validation('Enter agent user ID');
+    if (agentError || amountError) {
+      notify.validation('Missing fields');
       return;
     }
 
@@ -89,35 +92,35 @@ export default function WithdrawScreen() {
       return;
     }
 
-    initiateCashout.mutate(
+    initiateWithdrawal.mutate(
       {
         amountMinor: Math.round(Number(amount) * 100),
-        currency: country.code,
+        currency: country.currency,
         agentId: agentUserId,
       },
       {
         onSuccess: (data: any) => {
-          setCashoutId(data.id);
+          setWithdrawalId(data.id);
           setOtpStep(true);
           notify.info('Verify with OTP', 'Check your email/SMS for the OTP code');
         },
         onError: () => {
-          notify.error('Cashout failed', 'Please try again');
+          notify.error('Withdrawal request failed', 'Please try again');
         },
       }
     );
   };
 
-  const handleConfirmCashout = () => {
-    if (!otp || otp.length < 4) {
+  const handleConfirmWithdrawal = () => {
+    if (validateField('otp', otp)) {
       notify.validation('Enter a valid OTP');
       return;
     }
 
-    confirmCashout.mutate(
+    confirmWithdrawal.mutate(
       {
-        id: cashoutId!,
-        payload: { confirmationCode: otp },
+        id: withdrawalId!,
+        payload: { otp },
       },
       {
         onSuccess: () => {
@@ -133,10 +136,8 @@ export default function WithdrawScreen() {
   const stepTitle: Record<Step, string> = {
     select_method: 'Withdraw',
     select_country: 'Select Country',
-    form: 'Cashout',
+    form: 'Withdraw via Agent',
   };
-
-  const providers = country ? MOBILE_MONEY_PROVIDERS[country.code] ?? [] : [];
 
   return (
     <ActionScreen title={stepTitle[step]} onBack={handleBack}>
@@ -148,7 +149,7 @@ export default function WithdrawScreen() {
         <CountryPicker onSelect={handleCountrySelect} selected={country?.code} />
       )}
 
-      {step === 'form' && method === 'mobile_money' && country && (
+      {step === 'form' && method === 'agent' && country && (
         <View className="gap-4">
           <View className="flex-row items-center gap-3 bg-[#2F6B2F]/5 rounded-xl p-3 mb-1">
             <Text style={{ fontSize: 24 }}>{country.flag}</Text>
@@ -161,55 +162,36 @@ export default function WithdrawScreen() {
             </TouchableOpacity>
           </View>
 
-          <View className="gap-2">
-            <Text className="text-gray-700 text-sm font-medium">Mobile Money Provider</Text>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={{ gap: 8 }}
-            >
-              {providers.map((p) => (
-                <TouchableOpacity
-                  key={p.id}
-                  onPress={() => setProvider(p.id)}
-                  className={`px-4 py-2 rounded-full border ${
-                    provider === p.id ? 'bg-[#2F6B2F] border-[#2F6B2F]' : 'bg-white border-gray-200'
-                  }`}
-                >
-                  <Text
-                    className={`text-sm font-medium ${provider === p.id ? 'text-white' : 'text-gray-700'}`}
-                  >
-                    {p.name}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          </View>
-
           <Input
-            label="Agent User ID"
-            placeholder="e.g. 44444444-4444-4444-4444-444444444444"
+            label="Withdrawal Agent Code"
+            placeholder="e.g. 660106"
             autoCapitalize="none"
             value={agentUserId}
-            onChangeText={setAgentUserId}
-          />
-          <Input
-            label="Mobile Money Number"
-            placeholder="e.g. 0700 000 000"
-            keyboardType="phone-pad"
-            value={phone}
-            onChangeText={setPhone}
+            onChangeText={(value) => {
+              setAgentUserId(value);
+              touchField('agentUserId');
+              validateField('agentUserId', value);
+            }}
+            error={errors.agentUserId}
           />
           <Input
             label={`Amount (${country.currency})`}
             placeholder="0.00"
             keyboardType="decimal-pad"
             value={amount}
-            onChangeText={setAmount}
+            onChangeText={(value) => {
+              setAmount(value);
+              touchField('amount');
+              validateField('amount', value);
+            }}
+            error={errors.amount}
           />
-          <Button onPress={handleMobileMoneyWithdraw} disabled={initiateCashout.isPending}>
-            {initiateCashout.isPending ? 'Processing...' : 'Continue'}
+          <Button onPress={handleAgentWithdraw} disabled={initiateWithdrawal.isPending}>
+            {initiateWithdrawal.isPending ? 'Requesting OTP...' : 'Continue'}
           </Button>
+          {initiateWithdrawal.isPending ? (
+            <Text className="text-gray-500 text-xs">Submitting request and waiting for OTP challenge...</Text>
+          ) : null}
         </View>
       )}
 
@@ -229,17 +211,24 @@ export default function WithdrawScreen() {
             <Text className="text-gray-700 text-sm font-medium">OTP Code</Text>
             <TextInput
               className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3.5 text-gray-900 text-lg tracking-widest font-bold text-center"
-              placeholder="0000"
+              placeholder={otpStep ? 'Enter 6-digit OTP' : ''}
               placeholderTextColor="#9CA3AF"
               keyboardType="number-pad"
               maxLength={6}
               value={otp}
-              onChangeText={setOtp}
+              onChangeText={(value) => {
+                setOtp(value);
+                touchField('otp');
+                validateField('otp', value);
+              }}
+              editable={otpStep}
             />
+            {errors.otp ? <Text className="text-red-700 text-xs mt-1">{errors.otp}</Text> : null}
+            <Text className="text-gray-500 text-xs mt-1">Code expires in 5 minutes.</Text>
           </View>
 
-          <Button onPress={handleConfirmCashout} disabled={confirmCashout.isPending}>
-            {confirmCashout.isPending ? 'Verifying...' : 'Confirm Withdrawal'}
+          <Button onPress={handleConfirmWithdrawal} disabled={confirmWithdrawal.isPending}>
+            {confirmWithdrawal.isPending ? 'Verifying...' : 'Confirm Withdrawal'}
           </Button>
 
           <TouchableOpacity onPress={() => setOtpStep(false)} className="items-center py-2">

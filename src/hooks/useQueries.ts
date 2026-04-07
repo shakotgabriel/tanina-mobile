@@ -1,7 +1,20 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { api, ChangePasswordPayload, UpdateProfilePayload } from '@/src/lib/api/services';
-import { FxSwapQuoteRequest, FxSwapExecuteRequest, MobileMoneyDepositRequest, P2PTransferRequest, BillPayRequest, CashoutInitiateRequest, CashoutConfirmRequest, MerchantIntentRequest, UUID } from '@/src/types';
+import {
+  AgentDepositRequest,
+  FxSwapQuoteRequest,
+  FxSwapExecuteRequest,
+  MobileMoneyDepositRequest,
+  P2PTransferRequest,
+  BillPayRequest,
+  CashoutInitiateRequest,
+  CashoutConfirmRequest,
+  MerchantIntentRequest,
+  UUID,
+  WithdrawalInitiateRequest,
+  WithdrawalConfirmRequest,
+} from '@/src/types';
 import { useAuthStore } from '@/src/lib/store/authStore';
 
 export const useProfileQuery = (enabled = true) => {
@@ -15,13 +28,26 @@ export const useProfileQuery = (enabled = true) => {
   });
 };
 
-export const useBalancesQuery = (enabled = true) => {
+export const useSessionQuery = (enabled = true) => {
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  return useQuery({
+    queryKey: ['session'],
+    queryFn: api.getSessionUser,
+    enabled: enabled && isAuthenticated,
+    staleTime: 5 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
+  });
+};
+
+export const useBalancesQuery = (enabled = true, activeScreen = false) => {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   return useQuery({
     queryKey: ['balances'],
     queryFn: api.getBalances,
     enabled: enabled && isAuthenticated,
-    staleTime: 2 * 60 * 1000, // 2 minutes (more frequent for financial data)
+    staleTime: activeScreen ? 30 * 1000 : 2 * 60 * 1000,
+    refetchInterval: activeScreen ? 30 * 1000 : false,
+    refetchIntervalInBackground: false,
     gcTime: 5 * 60 * 1000, // 5 minutes
   });
 };
@@ -54,6 +80,12 @@ export const useChangePasswordMutation = () => {
 export const useLookupUserMutation = () => {
   return useMutation({
     mutationFn: (email: string) => api.lookupUserByEmail(email),
+  });
+};
+
+export const useLookupMerchantMutation = () => {
+  return useMutation({
+    mutationFn: (merchantIdentifier: string) => api.lookupMerchantByCodeOrId(merchantIdentifier),
   });
 };
 
@@ -96,6 +128,17 @@ export const useMobileMoneyDepositMutation = () => {
   });
 };
 
+export const useAgentDepositMutation = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: AgentDepositRequest) => api.depositViaAgent(payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['balances'] });
+      queryClient.invalidateQueries({ queryKey: ['transactions'] });
+    },
+  });
+};
+
 export const useBillPayMutation = () => {
   const queryClient = useQueryClient();
   return useMutation({
@@ -119,16 +162,24 @@ export const useMerchantPayMutation = () => {
 };
 
 export const useCashoutInitiateMutation = () => {
-  return useMutation({
-    mutationFn: (payload: CashoutInitiateRequest) => api.initiateCashout(payload),
-  });
+  return useWithdrawalInitiateMutation();
 };
 
 export const useCashoutConfirmMutation = () => {
+  return useWithdrawalConfirmMutation();
+};
+
+export const useWithdrawalInitiateMutation = () => {
+  return useMutation({
+    mutationFn: (payload: WithdrawalInitiateRequest | CashoutInitiateRequest) => api.initiateWithdrawal(payload),
+  });
+};
+
+export const useWithdrawalConfirmMutation = () => {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (params: { id: UUID; payload: CashoutConfirmRequest }) =>
-      api.confirmCashout(params.id, params.payload),
+    mutationFn: (params: { id: UUID; payload: WithdrawalConfirmRequest | CashoutConfirmRequest }) =>
+      api.confirmWithdrawal(params.id, params.payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['balances'] });
       queryClient.invalidateQueries({ queryKey: ['transactions'] });

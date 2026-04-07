@@ -1,8 +1,12 @@
 import { apiClient } from '@/src/lib/api/client';
 import { ENDPOINTS } from '@/src/lib/api/endpoints';
 import {
+  AgentDepositRequest,
   ApiResponse,
   AuthResponse,
+  AuthMeResponse,
+  BillPayRequest,
+  BillPaymentDTO,
   CashoutConfirmRequest,
   CashoutDTO,
   CashoutInitiateRequest,
@@ -62,6 +66,11 @@ export interface CashInPayload {
 }
 
 type AnyObject = Record<string, unknown>;
+
+const fetchSessionUser = async (): Promise<AuthMeResponse> => {
+  const response = await apiClient.get<AuthMeResponse | ApiResponse<AuthMeResponse>>(ENDPOINTS.auth.me);
+  return unwrapApiData(response.data);
+};
 
 const isApiResponse = <T>(value: unknown): value is ApiResponse<T> => {
   if (!value || typeof value !== 'object') {
@@ -144,7 +153,6 @@ const normalizeTransaction = (tx: UnifiedTransactionDTO) => {
     type: canonicalTransactionType(tx),
     status: canonicalTransactionStatus(tx.status),
     createdAt: occurredAt,
-    counterparty: tx.counterpartyUserId ?? undefined,
   };
 };
 
@@ -170,14 +178,94 @@ const decodeUserIdFromAccessToken = (): string | null => {
   }
 };
 
+// Accept UUID-like identifiers used in seeded environments (not strictly RFC-variant constrained).
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const MERCHANT_CODE_REGEX = /^\d{6}$/;
+
+const resolveMerchantUserId = async (merchantIdentifier: string): Promise<string> => {
+  const normalized = merchantIdentifier.trim();
+  if (!normalized) {
+    throw new Error('Merchant code or ID is required');
+  }
+
+  if (UUID_REGEX.test(normalized)) {
+    return normalized;
+  }
+
+  if (MERCHANT_CODE_REGEX.test(normalized)) {
+    const response = await apiClient.get<UserDTO | ApiResponse<UserDTO>>(ENDPOINTS.users.byMerchantCode(normalized));
+    const merchantUser = unwrapApiData(response.data);
+    if (!merchantUser?.userId) {
+      throw new Error('Merchant not found for provided code');
+    }
+    return merchantUser.userId;
+  }
+
+  throw new Error('Merchant ID must be a UUID or 6-digit merchant code');
+};
+
+const resolveAgentUserId = async (agentIdentifier: string): Promise<string> => {
+  const normalized = agentIdentifier.trim();
+  if (!normalized) {
+    throw new Error('Agent code or ID is required');
+  }
+
+  if (MERCHANT_CODE_REGEX.test(normalized)) {
+    const response = await apiClient.get<UserDTO | ApiResponse<UserDTO>>(ENDPOINTS.users.byMerchantCode(normalized));
+    const agentUser = unwrapApiData(response.data);
+    if (!agentUser?.userId) {
+      throw new Error('Agent account not found');
+    }
+    if ((agentUser.accountType ?? '').toUpperCase() !== 'AGENT') {
+      throw new Error('Selected code does not belong to an AGENT');
+    }
+    return agentUser.userId;
+  }
+
+  if (!UUID_REGEX.test(normalized)) {
+    throw new Error('Agent ID must be a UUID or a 6-digit agent code');
+  }
+
+  const response = await apiClient.get<UserDTO | ApiResponse<UserDTO>>(ENDPOINTS.users.byId(normalized));
+  const agentUser = unwrapApiData(response.data);
+  if (!agentUser?.userId) {
+    throw new Error('Agent account not found');
+  }
+  if ((agentUser.accountType ?? '').toUpperCase() !== 'AGENT') {
+    throw new Error('Selected account is not an AGENT');
+  }
+
+  return agentUser.userId;
+};
+
+const BILLER_CODE_MAP: Record<string, string> = {
+  umeme: 'UMEME',
+  nwsc: 'NWSC',
+  kplc: 'KPLC',
+  reco: 'RECO',
+};
+
+const resolveBillerCode = (billSource: string): string => {
+  const normalized = billSource.trim();
+  if (!normalized) {
+    throw new Error('Utility provider or biller code is required');
+  }
+
+  const mapped = BILLER_CODE_MAP[normalized.toLowerCase()];
+  if (mapped) {
+    return mapped;
+  }
+
+  return normalized.toUpperCase().replace(/\s+/g, '_');
+};
+
 const getCurrentUserId = async (): Promise<string> => {
   const tokenUserId = decodeUserIdFromAccessToken();
   if (tokenUserId) {
     return tokenUserId;
   }
 
-  const meResponse = await apiClient.get<UserDTO | ApiResponse<UserDTO>>(ENDPOINTS.auth.me);
-  const me = unwrapApiData(meResponse.data);
+  const me = await fetchSessionUser();
   if (!me?.userId) {
     throw new Error('Unable to resolve current user ID');
   }
@@ -229,24 +317,12 @@ export const api = {
     const response = await apiClient.get(ENDPOINTS.auth.health);
     return response.data;
   },
+  getSessionUser: async () => {
+    return fetchSessionUser();
+  },
   getMe: async () => {
-    const response = await apiClient.get<UserDTO | ApiResponse<UserDTO>>(ENDPOINTS.auth.me);
-    const authMe = unwrapApiData(response.data);
-
-    if (!authMe?.userId) {
-      return authMe;
-    }
-
-    try {
-      const profileResponse = await apiClient.get<UserDTO | ApiResponse<UserDTO>>(ENDPOINTS.users.byId(authMe.userId));
-      const profile = unwrapApiData(profileResponse.data);
-      return {
-        ...authMe,
-        ...profile,
-      };
-    } catch {
-      return authMe;
-    }
+    const userId = await getCurrentUserId();
+    return api.getUserById(userId);
   },
 
   getUserById: async (userId: UUID) => {
@@ -313,11 +389,38 @@ export const api = {
 
   getAgentFloat: async () => {
     const response = await apiClient.get(ENDPOINTS.agent.float);
-    return response.data;
+    return unwrapApiData(response.data);
   },
   agentCashIn: async (payload: CashInPayload) => {
     const response = await apiClient.post(ENDPOINTS.agent.cashIn, payload);
-    return response.data;
+    return unwrapApiData(response.data);
+  },
+  depositViaAgent: async (payload: AgentDepositRequest) => {
+    const agentUserId = await resolveAgentUserId(payload.agentId);
+
+    const walletResponse = await apiClient.get<WalletDTO | ApiResponse<WalletDTO>>(ENDPOINTS.wallets.me);
+    const wallet = unwrapApiData(walletResponse.data);
+    if (!wallet?.id) {
+      throw new Error('User wallet not found');
+    }
+
+    const idempotencyKey = `agent-cashin-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    const response = await apiClient.post(
+      ENDPOINTS.agent.cashIn,
+      {
+        userWalletId: wallet.id,
+        amountMinor: payload.amountMinor,
+        currency: payload.currency,
+        note: payload.note,
+      },
+      {
+        headers: {
+          'X-User-Id': agentUserId,
+          'Idempotency-Key': idempotencyKey,
+        },
+      }
+    );
+    return unwrapApiData(response.data);
   },
 
   internalCreditMobileMoneyDeposit: async (payload: AnyObject) => {
@@ -380,98 +483,148 @@ export const api = {
   },
 
   initiateMobileMoneyDeposit: async (payload: MobileMoneyDepositRequest) => {
-    const userId = await getCurrentUserId();
-    const response = await apiClient.post<MobileMoneyDepositDTO>(ENDPOINTS.mobileMoneyDeposits.initiate, {
+    const userId = String(payload.userId ?? (await getCurrentUserId()));
+    const response = await apiClient.post<MobileMoneyDepositDTO | ApiResponse<MobileMoneyDepositDTO>>(ENDPOINTS.mobileMoneyDeposits.initiate, {
       userId,
       phoneNumber: payload.phoneNumber,
       provider: payload.provider,
       amountMinor: payload.amountMinor,
       currency: payload.currency,
     });
-    return response.data;
+    return unwrapApiData(response.data);
   },
   mobileMoneyDepositCallback: async (provider: string, payload: AnyObject) => {
     const response = await apiClient.post(ENDPOINTS.mobileMoneyDeposits.callback(provider), payload);
-    return response.data;
+    return unwrapApiData(response.data);
   },
   getMobileMoneyDepositById: async (id: UUID) => {
-    const response = await apiClient.get<MobileMoneyDepositDTO>(ENDPOINTS.mobileMoneyDeposits.byId(id));
-    return response.data;
+    const response = await apiClient.get<MobileMoneyDepositDTO | ApiResponse<MobileMoneyDepositDTO>>(ENDPOINTS.mobileMoneyDeposits.byId(id));
+    return unwrapApiData(response.data);
   },
   getMobileMoneyDepositsByUserId: async (userId: UUID) => {
-    const response = await apiClient.get<MobileMoneyDepositDTO[]>(ENDPOINTS.mobileMoneyDeposits.byUserId(userId));
-    return response.data;
+    const response = await apiClient.get<MobileMoneyDepositDTO[] | ApiResponse<MobileMoneyDepositDTO[]>>(ENDPOINTS.mobileMoneyDeposits.byUserId(userId));
+    return ensureArray<MobileMoneyDepositDTO>(unwrapApiData(response.data));
   },
 
-  payBill: async (payload: AnyObject) => {
+  payBill: async (payload: BillPayRequest) => {
     const userId = await getCurrentUserId();
-    const request = payload as {
-      billerCode?: string;
-      provider?: string;
-      customerRef?: string;
-      accountNumber?: string;
-      amountMinor: number;
-      currency: string;
-    };
 
-    const response = await apiClient.post(ENDPOINTS.bills.pay, {
-      userId,
-      billerCode: request.billerCode ?? request.provider,
-      customerRef: request.customerRef ?? request.accountNumber,
-      amountMinor: request.amountMinor,
-      currency: request.currency,
-    });
-    return response.data;
-  },
-  billCallback: async (payload: AnyObject) => {
-    const response = await apiClient.post(ENDPOINTS.bills.callback, payload);
-    return response.data;
-  },
-  getBillById: async (id: UUID) => {
-    const response = await apiClient.get(ENDPOINTS.bills.byId(id));
-    return response.data;
-  },
-  getBillsByUserId: async (userId: UUID) => {
-    const response = await apiClient.get(ENDPOINTS.bills.byUserId(userId));
-    return response.data;
-  },
+    const billerSource = String(
+      payload.billerCode ?? payload.utilityProvider ?? payload.provider ?? payload.billType ?? ''
+    ).trim();
+    const customerRef = String(payload.customerRef ?? payload.meterNumber ?? payload.accountNumber ?? '').trim();
 
-  initiateCashout: async (payload: CashoutInitiateRequest) => {
-    const userId = await getCurrentUserId();
-    const response = await apiClient.post<CashoutDTO>(ENDPOINTS.cashout.initiate, {
+    if (!billerSource) {
+      throw new Error('Utility provider or biller code is required');
+    }
+
+    if (!customerRef) {
+      throw new Error('Customer reference or account number is required');
+    }
+
+    const billerCode = resolveBillerCode(billerSource);
+
+    const response = await apiClient.post<BillPaymentDTO | ApiResponse<BillPaymentDTO>>(ENDPOINTS.bills.pay, {
       userId,
-      agentUserId: (payload as any).agentUserId ?? (payload as any).agentId,
+      billerCode,
+      customerRef,
       amountMinor: payload.amountMinor,
       currency: payload.currency,
     });
-    return response.data;
+    return unwrapApiData(response.data);
+  },
+  billCallback: async (payload: AnyObject) => {
+    const response = await apiClient.post(ENDPOINTS.bills.callback, payload);
+    return unwrapApiData(response.data);
+  },
+  getBillById: async (id: UUID) => {
+    const response = await apiClient.get<BillPaymentDTO | ApiResponse<BillPaymentDTO>>(ENDPOINTS.bills.byId(id));
+    return unwrapApiData(response.data);
+  },
+  getBillsByUserId: async (userId: UUID) => {
+    const response = await apiClient.get<BillPaymentDTO[] | ApiResponse<BillPaymentDTO[]>>(ENDPOINTS.bills.byUserId(userId));
+    return ensureArray<BillPaymentDTO>(unwrapApiData(response.data));
+  },
+
+  initiateCashout: async (payload: CashoutInitiateRequest) => {
+    const userId = String(payload.userId ?? (await getCurrentUserId()));
+    const agentIdentifier = String((payload as any).agentUserId ?? (payload as any).agentId ?? '').trim();
+    const agentUserId = await resolveAgentUserId(agentIdentifier);
+    const idempotencyKey = `cashout-initiate-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    const response = await apiClient.post<CashoutDTO | ApiResponse<CashoutDTO>>(
+      ENDPOINTS.cashout.initiate,
+      {
+        userId,
+        agentUserId,
+        amountMinor: payload.amountMinor,
+        currency: payload.currency,
+      },
+      {
+        headers: {
+          'Idempotency-Key': idempotencyKey,
+        },
+      }
+    );
+    return unwrapApiData(response.data);
   },
   confirmCashout: async (id: UUID, payload: CashoutConfirmRequest) => {
-    const response = await apiClient.post<CashoutDTO>(ENDPOINTS.cashout.confirm(id), payload);
-    return response.data;
+    const idempotencyKey = `cashout-confirm-${id}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    const otp = String((payload as any).otp ?? (payload as any).confirmationCode ?? '').trim();
+    const response = await apiClient.post<CashoutDTO | ApiResponse<CashoutDTO>>(
+      ENDPOINTS.cashout.confirm(id),
+      { otp },
+      {
+        headers: {
+          'Idempotency-Key': idempotencyKey,
+        },
+      }
+    );
+    return unwrapApiData(response.data);
   },
   cancelCashout: async (id: UUID) => {
-    const response = await apiClient.post<CashoutDTO>(ENDPOINTS.cashout.cancel(id));
-    return response.data;
+    const response = await apiClient.post<CashoutDTO | ApiResponse<CashoutDTO>>(ENDPOINTS.cashout.cancel(id));
+    return unwrapApiData(response.data);
   },
   getCashoutById: async (id: UUID) => {
-    const response = await apiClient.get<CashoutDTO>(ENDPOINTS.cashout.byId(id));
-    return response.data;
+    const response = await apiClient.get<CashoutDTO | ApiResponse<CashoutDTO>>(ENDPOINTS.cashout.byId(id));
+    return unwrapApiData(response.data);
   },
   getCashoutsByUserId: async (userId: UUID) => {
-    const response = await apiClient.get<CashoutDTO[]>(ENDPOINTS.cashout.byUserId(userId));
-    return response.data;
+    const response = await apiClient.get<CashoutDTO[] | ApiResponse<CashoutDTO[]>>(ENDPOINTS.cashout.byUserId(userId));
+    return ensureArray<CashoutDTO>(unwrapApiData(response.data));
   },
   getCashoutsByAgentUserId: async (agentUserId: UUID) => {
-    const response = await apiClient.get<CashoutDTO[]>(ENDPOINTS.cashout.byAgentUserId(agentUserId));
-    return response.data;
+    const response = await apiClient.get<CashoutDTO[] | ApiResponse<CashoutDTO[]>>(ENDPOINTS.cashout.byAgentUserId(agentUserId));
+    return ensureArray<CashoutDTO>(unwrapApiData(response.data));
+  },
+
+  // Frontend alias: product language uses "withdrawal" while backend routes remain /cashout.
+  initiateWithdrawal: async (payload: CashoutInitiateRequest) => {
+    return api.initiateCashout(payload);
+  },
+  confirmWithdrawal: async (id: UUID, payload: CashoutConfirmRequest) => {
+    return api.confirmCashout(id, payload);
+  },
+  cancelWithdrawal: async (id: UUID) => {
+    return api.cancelCashout(id);
+  },
+  getWithdrawalById: async (id: UUID) => {
+    return api.getCashoutById(id);
+  },
+  getWithdrawalsByUserId: async (userId: UUID) => {
+    return api.getCashoutsByUserId(userId);
+  },
+  getWithdrawalsByAgentUserId: async (agentUserId: UUID) => {
+    return api.getCashoutsByAgentUserId(agentUserId);
   },
 
   createMerchantIntent: async (payload: MerchantIntentRequest) => {
-    const userId = await getCurrentUserId();
+    const userId = String(payload.payerUserId ?? (await getCurrentUserId()));
+    const merchantIdentifier = String((payload as any).merchantUserId ?? (payload as any).merchantId ?? '').trim();
+    const merchantUserId = await resolveMerchantUserId(merchantIdentifier);
     const response = await apiClient.post<MerchantIntentDTO | ApiResponse<MerchantIntentDTO>>(ENDPOINTS.merchant.createIntent, {
-      payerUserId: (payload as any).payerUserId ?? userId,
-      merchantUserId: (payload as any).merchantUserId ?? (payload as any).merchantId,
+      payerUserId: userId,
+      merchantUserId,
       amountMinor: payload.amountMinor,
       currency: payload.currency,
     });
@@ -518,22 +671,18 @@ export const api = {
     return ensureArray<WalletPocketDTO>(unwrapApiData(response.data));
   },
   getTransactions: async () => {
-    const user = await api.getMe();
-    if (!user?.userId) {
-      return [];
-    }
+    const userId = await getCurrentUserId();
 
     const response = await apiClient.get<UnifiedTransactionDTO[] | ApiResponse<UnifiedTransactionDTO[]>>(
-      ENDPOINTS.users.transactionHistory(user.userId)
+      ENDPOINTS.users.transactionHistory(userId)
     );
 
     return ensureArray<UnifiedTransactionDTO>(unwrapApiData(response.data)).map(normalizeTransaction);
   },
   updateProfile: async (payload: UpdateProfilePayload) => {
-    // First get the current user to obtain their userId
-    const user = await api.getMe();
-    const response = await apiClient.put<UserDTO>(ENDPOINTS.users.byId(user.userId!), payload);
-    return response.data;
+    const userId = await getCurrentUserId();
+    const response = await apiClient.put<UserDTO | ApiResponse<UserDTO>>(ENDPOINTS.users.byId(userId), payload);
+    return unwrapApiData(response.data);
   },
   changePassword: async (payload: ChangePasswordPayload) => {
     const response = await apiClient.post(ENDPOINTS.auth.changePassword, payload);
@@ -542,6 +691,34 @@ export const api = {
   lookupUserByEmail: async (email: string) => {
     const response = await apiClient.get<UserDTO | ApiResponse<UserDTO>>(ENDPOINTS.users.byEmail(email));
     return unwrapApiData(response.data);
+  },
+  lookupMerchantByCodeOrId: async (merchantIdentifier: string) => {
+    const normalized = merchantIdentifier.trim();
+    if (!normalized) {
+      throw new Error('Merchant code or ID is required');
+    }
+
+    const merchant = MERCHANT_CODE_REGEX.test(normalized)
+      ? unwrapApiData(
+          (
+            await apiClient.get<UserDTO | ApiResponse<UserDTO>>(ENDPOINTS.users.byMerchantCode(normalized))
+          ).data
+        )
+      : UUID_REGEX.test(normalized)
+        ? unwrapApiData(
+            (await apiClient.get<UserDTO | ApiResponse<UserDTO>>(ENDPOINTS.users.byId(normalized))).data
+          )
+        : null;
+
+    if (!merchant?.userId) {
+      throw new Error('Merchant not found for the provided code or ID');
+    }
+
+    if ((merchant.accountType ?? '').toUpperCase() !== 'MERCHANT') {
+      throw new Error('Selected account is not a merchant');
+    }
+
+    return merchant;
   },
   sendP2P: async (payload: P2PTransferRequest) => {
     const response = await apiClient.post<P2PTransfer | ApiResponse<P2PTransfer>>(ENDPOINTS.p2p.transfer, payload);

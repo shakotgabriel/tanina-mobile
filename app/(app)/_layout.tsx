@@ -9,6 +9,7 @@ export default function AppLayout() {
       <Stack.Screen name="convert" />
       <Stack.Screen name="withdraw" />
       <Stack.Screen name="payments" />
+      <Stack.Screen name="merchant-directory" />
     </Stack>
   );
 }

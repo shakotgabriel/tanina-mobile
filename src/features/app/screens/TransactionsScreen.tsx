@@ -13,13 +13,20 @@ import { useTransactionsQuery } from '@/src/hooks/useQueries';
 import { useEnrichedTransactions } from '@/src/hooks/useEnrichedTransactions';
 import { formatCurrency } from '@/src/lib/utils/currency';
 import {
+  counterpartyDisplay,
   isCredit,
+  sourceDisplay,
   statusBg,
   statusText,
   txIcon,
   txIconColor,
   txLabel,
+  directionLabel,
+  statusLabel,
+  txTitle,
+  txSubtitle,
 } from '@/src/lib/utils/transaction-ui';
+import { EmptyState, Skeleton } from '@/src/components/common';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -35,6 +42,7 @@ type Tx = {
   description?: string;
   counterparty?: string;
   counterpartyUserId?: string;
+  counterpartyDisplayName?: string;
   counterpartyLabel?: string;
   source?: string;
   reference?: string;
@@ -98,7 +106,8 @@ function TransactionDetailModal({ tx, onClose }: { tx: Tx | null; onClose: () =>
   if (!tx) return null;
   const credit = isCredit(tx);
   const color = txIconColor(tx.type, tx.direction);
-  const counterpartyValue = tx.counterpartyLabel ?? tx.counterparty ?? tx.counterpartyUserId ?? '';
+  const counterpartyValue = counterpartyDisplay(tx) ?? '';
+  const sourceValue = sourceDisplay(tx);
 
   return (
     <Modal visible={!!tx} transparent animationType="slide" onRequestClose={onClose}>
@@ -122,21 +131,21 @@ function TransactionDetailModal({ tx, onClose }: { tx: Tx | null; onClose: () =>
               {credit ? '+' : '−'} {formatCurrency(tx.amountMinor, tx.currency)}
             </Text>
             <View className={`mt-2 px-3 py-1 rounded-full ${statusBg(tx.status)}`}>
-              <Text className={`text-xs font-semibold uppercase ${statusText(tx.status)}`}>{tx.status}</Text>
+              <Text className={`text-xs font-semibold uppercase ${statusText(tx.status)}`}>{statusLabel(tx.status)}</Text>
             </View>
           </View>
 
           {/* Detail rows */}
-          <DetailRow label="Direction" value={tx.direction ?? (credit ? 'CREDIT' : 'DEBIT')} />
+          <DetailRow label="Direction" value={directionLabel(tx.direction ?? (credit ? 'CREDIT' : 'DEBIT'))} />
           <DetailRow label="Currency" value={tx.currency} />
           {tx.description && <DetailRow label="Description" value={tx.description} />}
           {!!counterpartyValue && <DetailRow label="Counterparty" value={counterpartyValue} />}
-          {tx.source && <DetailRow label="Source" value={tx.source} />}
+          {sourceValue && <DetailRow label="Source" value={sourceValue} />}
           {tx.reference && <DetailRow label="Reference" value={tx.reference} mono />}
           {txTime(tx) && (
             <DetailRow label="Date" value={new Date(txTime(tx)!).toLocaleString()} />
           )}
-          <DetailRow label="ID" value={tx.id} mono />
+          <DetailRow label="Transaction ID" value={tx.id} mono />
         </View>
       </View>
     </Modal>
@@ -178,12 +187,7 @@ function FilterChips({
 function TransactionItem({ tx, onPress }: { tx: Tx; onPress: () => void }) {
   const credit = isCredit(tx);
   const color = txIconColor(tx.type, tx.direction);
-  const subtitle =
-    tx.counterpartyLabel ??
-    tx.counterparty ??
-    (tx.counterpartyUserId ? 'Resolving user...' : undefined) ??
-    tx.description ??
-    tx.currency;
+  const subtitle = txSubtitle(tx);
   return (
     <TouchableOpacity
       onPress={onPress}
@@ -194,7 +198,7 @@ function TransactionItem({ tx, onPress }: { tx: Tx; onPress: () => void }) {
         <Ionicons name={txIcon(tx.type)} size={18} color={color} />
       </View>
       <View className="flex-1">
-        <Text className="text-gray-800 text-sm font-semibold">{txLabel(tx.type)}</Text>
+        <Text className="text-gray-800 text-sm font-semibold">{txTitle(tx)}</Text>
         <Text className="text-gray-400 text-xs mt-0.5" numberOfLines={1}>
           {subtitle}
         </Text>
@@ -204,7 +208,7 @@ function TransactionItem({ tx, onPress }: { tx: Tx; onPress: () => void }) {
           {credit ? '+' : '−'}{formatCurrency(tx.amountMinor, tx.currency)}
         </Text>
         <View className={`mt-1 px-2 py-0.5 rounded-full ${statusBg(tx.status)}`}>
-          <Text className={`text-[10px] font-semibold uppercase ${statusText(tx.status)}`}>{tx.status}</Text>
+          <Text className={`text-[10px] font-semibold uppercase ${statusText(tx.status)}`}>{statusLabel(tx.status)}</Text>
         </View>
       </View>
       <Ionicons name="chevron-forward" size={14} color="#9CA3AF" style={{ marginLeft: 8 }} />
@@ -235,6 +239,7 @@ export default function TransactionsScreen() {
 
   const paginated = filtered.slice(0, page * PAGE_SIZE);
   const hasMore   = paginated.length < filtered.length;
+  const showLoadingSkeleton = isLoading && transactions.length === 0;
 
   return (
     <View className="flex-1 bg-[#F8FAFC]">
@@ -253,35 +258,40 @@ export default function TransactionsScreen() {
         <FilterChips options={DATE_RANGES} selected={dateFilter}   onSelect={(v) => { setDateFilter(v);   setPage(1); }} />
       </View>
 
-      <FlatList
-        data={paginated}
-        keyExtractor={(tx, index) => `${tx.id}-${tx.createdAt ?? tx.occurredAt ?? index}`}
-        renderItem={({ item }) => (
-          <TransactionItem tx={item} onPress={() => setSelected(item)} />
-        )}
-        ListEmptyComponent={
-          <View className="items-center justify-center py-20">
-            <Ionicons name="receipt-outline" size={40} color="#D1D5DB" />
-            <Text className="text-gray-400 text-sm mt-3">
-              {isLoading ? 'Loading…' : 'No transactions found'}
-            </Text>
-            {!isLoading && (
-              <Text className="text-gray-400 text-xs mt-1">Try a different date or status filter.</Text>
-            )}
-          </View>
-        }
-        ListFooterComponent={
-          hasMore ? (
-            <TouchableOpacity
-              onPress={() => setPage((p) => p + 1)}
-              className="mx-4 my-4 py-3 border border-gray-200 rounded-xl items-center bg-white"
-            >
-              <Text className="text-gray-600 text-sm font-semibold">Load more</Text>
-            </TouchableOpacity>
-          ) : null
-        }
-        contentContainerStyle={{ flexGrow: 1 }}
-      />
+      {showLoadingSkeleton ? (
+        <View className="px-4 pt-3 gap-3">
+          {Array.from({ length: 8 }).map((_, index) => (
+            <Skeleton key={`tx-skeleton-${index}`} height={70} />
+          ))}
+        </View>
+      ) : (
+        <FlatList
+          data={paginated}
+          keyExtractor={(tx, index) => `${tx.id}-${tx.createdAt ?? tx.occurredAt ?? index}`}
+          renderItem={({ item }) => (
+            <TransactionItem tx={item} onPress={() => setSelected(item)} />
+          )}
+          ListEmptyComponent={
+            <View className="items-center justify-center py-20 px-4">
+              <EmptyState
+                title="No transactions found"
+                description="Try a different date or status filter."
+              />
+            </View>
+          }
+          ListFooterComponent={
+            hasMore ? (
+              <TouchableOpacity
+                onPress={() => setPage((p) => p + 1)}
+                className="mx-4 my-4 py-3 border border-gray-200 rounded-xl items-center bg-white"
+              >
+                <Text className="text-gray-600 text-sm font-semibold">Load more</Text>
+              </TouchableOpacity>
+            ) : null
+          }
+          contentContainerStyle={{ flexGrow: 1 }}
+        />
+      )}
 
       <TransactionDetailModal tx={selected} onClose={() => setSelected(null)} />
     </View>

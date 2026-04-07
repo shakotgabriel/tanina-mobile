@@ -86,6 +86,15 @@ function PasswordField({
   );
 }
 
+function humanizeValue(value?: string | null) {
+  if (!value) return 'Not set';
+  return value
+    .toLowerCase()
+    .split('_')
+    .map((chunk) => chunk.charAt(0).toUpperCase() + chunk.slice(1))
+    .join(' ');
+}
+
 function SectionCard({
   title,
   icon,
@@ -361,7 +370,7 @@ export default function ProfileScreen() {
               }}
             >
               <Text style={{ color: '#FFFFFF', fontSize: 11, fontWeight: '600' }}>
-                {profile.accountType}
+                {humanizeValue(profile.accountType)}
               </Text>
             </View>
           ) : null}
@@ -490,8 +499,8 @@ export default function ProfileScreen() {
           <Text className="text-gray-800 text-sm font-semibold">Account Details</Text>
         </View>
         <View className="border-t border-gray-100 pt-3 gap-2">
-          <InfoRow label="Account Type" value={profile?.accountType ?? 'BASIC'} />
-          <InfoRow label="Status" value={profile?.status ?? 'ACTIVE'} />
+          <InfoRow label="Account Type" value={humanizeValue(profile?.accountType ?? 'BASIC')} />
+          <InfoRow label="Status" value={humanizeValue(profile?.status ?? 'ACTIVE')} />
           {profile?.createdAt ? (
             <InfoRow
               label="Member Since"

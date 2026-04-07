@@ -23,11 +23,13 @@ import { useEnrichedTransactions } from '@/src/hooks/useEnrichedTransactions';
 import { formatCurrency } from '@/src/lib/utils/currency';
 import {
   isCredit,
+  statusLabel,
   statusBg,
   statusText,
   txIcon,
   txIconColor,
-  txLabel,
+  txTitle,
+  txSubtitle,
 } from '@/src/lib/utils/transaction-ui';
 
 const SECONDARY_CURRENCIES = ['SSP', 'KES', 'UGX', 'RWF'];
@@ -60,6 +62,50 @@ const MOBILE_MONEY_PROVIDERS: Record<string, { name: string; placeholder: string
     { name: 'Debit Card', placeholder: 'Card number' },
   ],
 };
+
+function RecentTransactionItem({
+  tx,
+  index,
+  total,
+}: {
+  tx: any;
+  index: number;
+  total: number;
+}) {
+  const credit = isCredit(tx);
+  const color = txIconColor(tx.type, tx.direction);
+
+  return (
+    <View
+      className={`flex-row items-center px-4 py-3 ${index < total - 1 ? 'border-b border-gray-100' : ''}`}
+    >
+      <View
+        className="w-9 h-9 rounded-full items-center justify-center mr-3"
+        style={{ backgroundColor: color + '18' }}
+      >
+        <Ionicons name={txIcon(tx.type)} size={15} color={color} />
+      </View>
+      <View className="flex-1">
+        <Text className="text-gray-800 text-sm font-semibold">
+          {txTitle(tx)}
+        </Text>
+        <Text className="text-gray-400 text-xs mt-0.5" numberOfLines={1}>
+          {txSubtitle(tx)}
+        </Text>
+      </View>
+      <View className="items-end">
+        <Text style={{ color }} className="text-sm font-semibold">
+          {(credit ? '+' : '-')} {formatCurrency(tx.amountMinor, tx.currency)}
+        </Text>
+        <View className={`mt-1 px-2 py-0.5 rounded-full ${statusBg(tx.status)}`}>
+          <Text className={`text-[10px] font-semibold uppercase ${statusText(tx.status)}`}>
+            {statusLabel(tx.status)}
+          </Text>
+        </View>
+      </View>
+    </View>
+  );
+}
 
 // ─── Top Up Modal ────────────────────────────────────────────────────────────
 
@@ -613,39 +659,12 @@ export default function WalletScreen() {
         ) : (
           <View className="bg-white border border-gray-100 rounded-2xl overflow-hidden">
             {recent.map((tx, idx) => (
-              (() => {
-                const credit = isCredit(tx as any);
-                const color = txIconColor((tx as any).type, (tx as any).direction);
-                return (
-              <View
+              <RecentTransactionItem
                 key={`${tx.id}-${(tx as any).createdAt ?? (tx as any).occurredAt ?? idx}`}
-                className={`flex-row items-center px-4 py-3 ${idx < recent.length - 1 ? 'border-b border-gray-100' : ''}`}
-              >
-                <View
-                  className="w-9 h-9 rounded-full items-center justify-center mr-3"
-                  style={{ backgroundColor: color + '18' }}
-                >
-                  <Ionicons name={txIcon((tx as any).type)} size={15} color={color} />
-                </View>
-                <View className="flex-1">
-                  <Text className="text-gray-800 text-sm font-semibold">
-                    {txLabel(tx.type)}
-                  </Text>
-                  <Text className="text-gray-400 text-xs mt-0.5" numberOfLines={1}>
-                    {tx.counterpartyLabel ?? tx.counterparty ?? (tx.counterpartyUserId ? 'Resolving user...' : undefined) ?? tx.description ?? tx.currency}
-                  </Text>
-                </View>
-                <View className="items-end">
-                  <Text style={{ color }} className="text-sm font-semibold">
-                    {(credit ? '+' : '-')} {formatCurrency(tx.amountMinor, tx.currency)}
-                  </Text>
-                  <View className={`mt-1 px-2 py-0.5 rounded-full ${statusBg(tx.status)}`}>
-                    <Text className={`text-[10px] font-semibold uppercase ${statusText(tx.status)}`}>{tx.status}</Text>
-                  </View>
-                </View>
-              </View>
-                );
-              })()
+                tx={tx}
+                index={idx}
+                total={recent.length}
+              />
             ))}
           </View>
         )}

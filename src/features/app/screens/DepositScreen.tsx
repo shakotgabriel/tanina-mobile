@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { ScrollView, Text, TouchableOpacity, View } from 'react-native';
+import { useMemo, useState } from 'react';
+import { Text, TouchableOpacity, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { notify } from '@/src/lib/utils/notify';
@@ -9,35 +9,47 @@ import ActionScreen from '@/src/components/layout/ActionScreen';
 import MethodSelector, { Method } from '@/src/features/app/components/MethodSelector';
 import CountryPicker, {
   Country,
-  MOBILE_MONEY_PROVIDERS,
 } from '@/src/features/app/components/CountryPicker';
-import { useMobileMoneyDepositMutation } from '@/src/hooks/useQueries';
+import { useAgentDepositMutation } from '@/src/hooks/useQueries';
+import { useFormValidation } from '@/src/hooks/useFormValidation';
 
 type Step = 'select_method' | 'select_country' | 'form';
-type DepositMethod = 'mobile_money';
+type DepositMethod = 'agent';
 
 const DEPOSIT_METHODS: Method[] = [
   {
-    id: 'mobile_money',
-    icon: 'phone-portrait-outline',
-    title: 'Deposit via Mobile Money',
-    description: 'Deposit using mobile money from Uganda, Kenya, Rwanda or South Sudan',
+    id: 'agent',
+    icon: 'person-outline',
+    title: 'Deposit via Agent',
+    description: 'Credit your wallet through a registered agent account',
   },
 ];
 
 export default function DepositScreen() {
   const router = useRouter();
-  const deposit = useMobileMoneyDepositMutation();
+  const deposit = useAgentDepositMutation();
   const [step, setStep] = useState<Step>('select_method');
   const [method, setMethod] = useState<DepositMethod | null>(null);
   const [country, setCountry] = useState<Country | null>(null);
-  const [provider, setProvider] = useState('');
-  const [phone, setPhone] = useState('');
+  const [agentUserId, setAgentUserId] = useState('');
   const [amount, setAmount] = useState('');
+  const [note, setNote] = useState('');
   const [success, setSuccess] = useState(false);
 
+  const formValues = useMemo(() => ({ agentUserId, amount }), [agentUserId, amount]);
+  const { errors, validateField, touchField } = useFormValidation(
+    {
+      agentUserId: (value) => (String(value).trim() ? null : 'Deposit agent code is required'),
+      amount: (value) => {
+        const parsed = Number(value);
+        return Number.isFinite(parsed) && parsed > 0 ? null : 'Amount must be greater than 0';
+      },
+    },
+    formValues
+  );
+
   function handleBack() {
-    if (step === 'form' && method === 'mobile_money') {
+    if (step === 'form' && method === 'agent') {
       setStep('select_country');
     } else if (step === 'select_country') {
       setStep('select_method');
@@ -55,29 +67,20 @@ export default function DepositScreen() {
 
   function handleCountrySelect(c: Country) {
     setCountry(c);
-    setProvider('');
     setStep('form');
   }
 
   const stepTitle: Record<Step, string> = {
     select_method: 'Deposit',
     select_country: 'Select Country',
-    form: 'Deposit via Mobile Money',
+    form: 'Deposit via Agent',
   };
 
-  const providers = country ? MOBILE_MONEY_PROVIDERS[country.code] ?? [] : [];
-
-  const handleMobileMoneyDeposit = () => {
-    if (!amount || isNaN(Number(amount)) || Number(amount) <= 0) {
-      notify.validation('Enter a valid amount');
-      return;
-    }
-    if (!phone.trim()) {
-      notify.validation('Enter a phone number');
-      return;
-    }
-    if (!provider) {
-      notify.validation('Select a provider');
+  const handleAgentDeposit = () => {
+    const agentError = validateField('agentUserId', agentUserId);
+    const amountError = validateField('amount', amount);
+    if (agentError || amountError) {
+      notify.validation('Missing fields');
       return;
     }
     if (!country) {
@@ -85,21 +88,19 @@ export default function DepositScreen() {
       return;
     }
 
-    const providerName = providers.find((p) => p.id === provider)?.name || provider;
-
     deposit.mutate(
       {
+        agentId: agentUserId,
         amountMinor: Math.round(Number(amount) * 100),
-        currency: country.code,
-        phoneNumber: phone,
-        provider: providerName,
+        currency: country.currency,
+        note: note.trim() || undefined,
       },
       {
         onSuccess: () => {
           setSuccess(true);
         },
         onError: () => {
-          notify.error('Deposit failed', 'Please try again');
+          notify.error('Agent deposit failed', 'Please confirm the agent ID and try again');
         },
       }
     );
@@ -115,7 +116,7 @@ export default function DepositScreen() {
         <CountryPicker onSelect={handleCountrySelect} selected={country?.code} />
       )}
 
-      {step === 'form' && method === 'mobile_money' && country && (
+      {step === 'form' && method === 'agent' && country && (
         <View className="gap-4">
           <View className="flex-row items-center gap-3 bg-[#2F6B2F]/5 rounded-xl p-3 mb-1">
             <Text style={{ fontSize: 24 }}>{country.flag}</Text>
@@ -128,40 +129,37 @@ export default function DepositScreen() {
             </TouchableOpacity>
           </View>
 
-          <View className="gap-2">
-            <Text className="text-gray-700 text-sm font-medium">Mobile Money Provider</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
-              {providers.map((p) => (
-                <TouchableOpacity
-                  key={p.id}
-                  onPress={() => setProvider(p.id)}
-                  className={`px-4 py-2 rounded-full border ${
-                    provider === p.id ? 'bg-[#2F6B2F] border-[#2F6B2F]' : 'bg-white border-gray-200'
-                  }`}
-                >
-                  <Text className={`text-sm font-medium ${provider === p.id ? 'text-white' : 'text-gray-700'}`}>
-                    {p.name}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          </View>
-
           <Input
-            label="Mobile Money Number"
-            placeholder="e.g. 0700 000 000"
-            keyboardType="phone-pad"
-            value={phone}
-            onChangeText={setPhone}
+            label="Agent Code"
+            placeholder="e.g. 660106"
+            autoCapitalize="none"
+            value={agentUserId}
+            onChangeText={(value) => {
+              setAgentUserId(value);
+              touchField('agentUserId');
+              validateField('agentUserId', value);
+            }}
+            error={errors.agentUserId}
           />
           <Input
             label={`Amount (${country.currency})`}
             placeholder="0.00"
             keyboardType="decimal-pad"
             value={amount}
-            onChangeText={setAmount}
+            onChangeText={(value) => {
+              setAmount(value);
+              touchField('amount');
+              validateField('amount', value);
+            }}
+            error={errors.amount}
           />
-          <Button onPress={handleMobileMoneyDeposit} disabled={deposit.isPending}>
+          <Input
+            label="Note (Optional)"
+            placeholder="e.g. Counter deposit at branch"
+            value={note}
+            onChangeText={setNote}
+          />
+          <Button onPress={handleAgentDeposit} disabled={deposit.isPending}>
             {deposit.isPending ? 'Processing...' : 'Continue'}
           </Button>
         </View>
@@ -174,7 +172,7 @@ export default function DepositScreen() {
           </View>
           <Text className="text-gray-900 text-2xl font-bold">Deposit Initiated</Text>
           <Text className="text-gray-500 text-center">
-            Your deposit of {amount} {country?.currency} via {providers.find((p) => p.id === provider)?.name} has been initiated.
+            Your deposit of {amount} {country?.currency} via agent code {agentUserId} has been initiated.
           </Text>
           <TouchableOpacity
             onPress={() => router.back()}

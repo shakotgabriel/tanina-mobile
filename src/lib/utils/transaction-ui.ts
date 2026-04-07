@@ -5,12 +5,162 @@ export type TxLike = {
   direction?: 'CREDIT' | 'DEBIT';
 };
 
+type TxDisplayLike = {
+  type?: string;
+  counterpartyDisplayName?: string;
+  counterpartyLabel?: string;
+  counterparty?: string;
+  counterpartyUserId?: string;
+  description?: string;
+  source?: string;
+  currency?: string;
+};
+
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+const isUuidLike = (value?: string | null): boolean => {
+  if (!value) {
+    return false;
+  }
+  return UUID_REGEX.test(value.trim());
+};
+
+export function counterpartyDisplay(tx: TxDisplayLike) {
+  if (tx.counterpartyDisplayName) {
+    return tx.counterpartyDisplayName;
+  }
+
+  if (tx.counterpartyLabel) {
+    return tx.counterpartyLabel;
+  }
+
+  if (tx.counterparty && !isUuidLike(tx.counterparty)) {
+    return tx.counterparty;
+  }
+
+  return undefined;
+}
+
+const GENERIC_COUNTERPARTY_TEXT = new Set([
+  'merchant payment',
+  'payment',
+  'send money',
+  'p2p transfer',
+  'transfer',
+  'withdrawal',
+  'cashout',
+  'mobile money deposit',
+  'deposit',
+  'utility bill payment',
+  'bill payment',
+]);
+
+const normalizeLabel = (value?: string) => (value ?? '').trim().toLowerCase();
+
+const isInternalServiceText = (value?: string) => {
+  const normalized = normalizeLabel(value);
+  if (!normalized) {
+    return false;
+  }
+
+  if (normalized.endsWith('-service')) {
+    return true;
+  }
+
+  return [
+    'service',
+    'gateway',
+    'processor',
+    'orchestrator',
+    'internal',
+  ].some((token) => normalized.includes(token));
+};
+
+const isGenericCounterpartyText = (value?: string, txType?: string) => {
+  const normalized = normalizeLabel(value);
+  if (!normalized) {
+    return true;
+  }
+
+  if (GENERIC_COUNTERPARTY_TEXT.has(normalized)) {
+    return true;
+  }
+
+  const typeLabel = normalizeLabel(txLabel(txType));
+  return normalized === typeLabel;
+};
+
+const meaningfulText = (value?: string, txType?: string, options?: { disallowInternalServiceText?: boolean }) => {
+  if (!value || isUuidLike(value) || isGenericCounterpartyText(value, txType)) {
+    return undefined;
+  }
+
+  if (options?.disallowInternalServiceText && isInternalServiceText(value)) {
+    return undefined;
+  }
+
+  return value;
+};
+
+export function sourceDisplay(tx: TxDisplayLike) {
+  return meaningfulText(tx.source, tx.type, { disallowInternalServiceText: true });
+}
+
+export function txTitle(tx: TxDisplayLike) {
+  return counterpartyDisplay(tx) ?? txLabel(tx.type);
+}
+
 export function txLabel(type?: string) {
+  switch (type?.toUpperCase()) {
+    case 'MOBILE_MONEY_DEPOSIT': return 'Mobile Money Deposit';
+    case 'P2P_TRANSFER': return 'Send Money';
+    case 'MERCHANT_PAYMENT': return 'Merchant Payment';
+    case 'BILL_PAYMENT': return 'Utility Bill Payment';
+    case 'CASHOUT': return 'Withdrawal';
+    case 'TOPUP': return 'Wallet Top Up';
+    case 'SEND': return 'Send Money';
+    case 'PAYMENT': return 'Payment';
+    case 'REFUND': return 'Refund';
+    case 'WITHDRAWAL': return 'Withdrawal';
+    default:
+      break;
+  }
+
   return (type ?? '')
     .toLowerCase()
     .split('_')
     .map((chunk) => chunk.charAt(0).toUpperCase() + chunk.slice(1))
     .join(' ');
+}
+
+export function statusLabel(status?: string) {
+  switch (status?.toUpperCase()) {
+    case 'COMPLETED': return 'Completed';
+    case 'PENDING': return 'Pending';
+    case 'FAILED': return 'Failed';
+    case 'CANCELLED': return 'Cancelled';
+    case 'EXPIRED': return 'Expired';
+    default:
+      return txLabel(status);
+  }
+}
+
+export function directionLabel(direction?: 'CREDIT' | 'DEBIT') {
+  if (direction === 'CREDIT') return 'Received';
+  if (direction === 'DEBIT') return 'Sent';
+  return 'Unknown';
+}
+
+export function txSubtitle(tx: TxDisplayLike) {
+  if (counterpartyDisplay(tx)) {
+    return txLabel(tx.type);
+  }
+
+  return (
+    sourceDisplay(tx) ??
+    meaningfulText(tx.description, tx.type) ??
+    (tx.currency ? `${tx.currency} transaction` : 'Transaction')
+  );
 }
 
 export function txIcon(type?: string): React.ComponentProps<typeof Ionicons>['name'] {

@@ -1,19 +1,21 @@
-import { useMemo } from 'react';
 import { ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
+import { EmptyState, Skeleton } from '@/src/components/common';
 import Screen from '@/src/components/layout/Screen';
-import { useBalancesQuery, useProfileQuery, useTransactionsQuery } from '@/src/hooks/useQueries';
+import { useBalancesQuery, useSessionQuery, useTransactionsQuery } from '@/src/hooks/useQueries';
 import { useEnrichedTransactions } from '@/src/hooks/useEnrichedTransactions';
 import { formatCurrency } from '@/src/lib/utils/currency';
 import {
   isCredit,
+  statusLabel,
   statusBg,
   statusText,
   txIcon,
   txIconColor,
-  txLabel,
+  txTitle,
+  txSubtitle,
 } from '@/src/lib/utils/transaction-ui';
 
 const QUICK_ACTIONS = [
@@ -23,10 +25,54 @@ const QUICK_ACTIONS = [
   { label: 'Payments', icon: 'cash-outline' as const, route: '/payments' },
 ];
 
+function RecentTransactionItem({
+  tx,
+  index,
+  total,
+}: {
+  tx: any;
+  index: number;
+  total: number;
+}) {
+  const credit = isCredit(tx);
+  const color = txIconColor(tx.type, tx.direction);
+
+  return (
+    <View
+      className={`flex-row items-center px-4 py-3 ${index < total - 1 ? 'border-b border-gray-100' : ''}`}
+    >
+      <View
+        className="w-9 h-9 rounded-full items-center justify-center mr-3"
+        style={{ backgroundColor: color + '18' }}
+      >
+        <Ionicons name={txIcon(tx.type)} size={16} color={color} />
+      </View>
+      <View className="flex-1">
+        <Text className="text-gray-800 text-sm font-semibold">
+          {txTitle(tx)}
+        </Text>
+        <Text className="text-gray-400 text-xs mt-0.5" numberOfLines={1}>
+          {txSubtitle(tx)}
+        </Text>
+      </View>
+      <View className="items-end">
+        <Text style={{ color }} className="text-sm font-semibold">
+          {(credit ? '+' : '-')} {formatCurrency(tx.amountMinor, tx.currency)}
+        </Text>
+        <View className={`mt-1 px-2 py-0.5 rounded-full ${statusBg(tx.status)}`}>
+          <Text className={`text-[10px] font-semibold uppercase ${statusText(tx.status)}`}>
+            {statusLabel(tx.status)}
+          </Text>
+        </View>
+      </View>
+    </View>
+  );
+}
+
 export default function HomeScreen() {
   const router = useRouter();
-  const { data: profile, isLoading: profileLoading } = useProfileQuery(true); // Enable query when on home screen
-  const { data: balancesData, isLoading: balancesLoading } = useBalancesQuery(true); // Enable query to display balances
+  const { data: profile, isLoading: profileLoading } = useSessionQuery(true); // Enable query when on home screen
+  const { data: balancesData, isLoading: balancesLoading } = useBalancesQuery(true, true);
   const { data: transactionsData, isLoading: transactionsLoading } = useTransactionsQuery(true); // Enable query to display recent transactions
 
   const balances = Array.isArray(balancesData) ? balancesData : [];
@@ -49,7 +95,7 @@ export default function HomeScreen() {
       <View className="mb-5">
         <Text className="text-gray-400 text-sm">Good day,</Text>
         {profileLoading ? (
-          <View className="h-8 w-48 mt-1 rounded-lg bg-gray-200" />
+          <Skeleton height={32} width={192} style={{ marginTop: 4 }} />
         ) : (
           <Text className="text-gray-900 text-2xl font-bold leading-tight">
             {displayName}
@@ -59,7 +105,16 @@ export default function HomeScreen() {
 
       {/* Primary balance card */}
       {balancesLoading ? (
-        <View className="bg-[#2F6B2F]/20 rounded-2xl p-5 mb-4 h-44" />
+        <View className="bg-white rounded-2xl p-5 mb-4 border border-gray-100">
+          <Skeleton height={12} width={110} />
+          <Skeleton height={38} width={180} style={{ marginTop: 10 }} />
+          <Skeleton height={12} width={84} style={{ marginTop: 8 }} />
+          <View className="flex-row gap-2 mt-5">
+            {[1, 2, 3, 4].map((i) => (
+              <Skeleton key={i} height={56} style={{ flex: 1 }} />
+            ))}
+          </View>
+        </View>
       ) : (
         <View className="bg-[#2F6B2F] rounded-2xl p-5 mb-4">
           <Text className="text-white/60 text-xs font-medium uppercase tracking-widest mb-2">
@@ -106,10 +161,7 @@ export default function HomeScreen() {
             contentContainerStyle={{ gap: 10 }}
           >
             {[1, 2, 3].map((i) => (
-              <View
-                key={i}
-                className="bg-gray-100 rounded-xl px-4 py-3 w-44 h-16"
-              />
+              <Skeleton key={i} height={64} width={176} />
             ))}
           </ScrollView>
         </View>
@@ -148,50 +200,20 @@ export default function HomeScreen() {
         {transactionsLoading ? (
           <View className="space-y-2">
             {[1, 2, 3, 4].map((i) => (
-              <View key={i} className="bg-gray-100 rounded-2xl h-16" />
+              <Skeleton key={i} height={64} />
             ))}
           </View>
         ) : recent.length === 0 ? (
-          <View className="bg-white border border-gray-100 rounded-2xl p-8 items-center">
-            <Ionicons name="receipt-outline" size={36} color="#D1D5DB" />
-            <Text className="text-gray-400 text-sm mt-2">No transactions yet</Text>
-          </View>
+          <EmptyState title="No transactions yet" description="Once you send, deposit, or pay, your recent activity will appear here." />
         ) : (
           <View className="bg-white border border-gray-100 rounded-2xl overflow-hidden">
             {recent.map((tx: any, idx: number) => (
-              (() => {
-                const credit = isCredit(tx);
-                const color = txIconColor(tx.type, tx.direction);
-                return (
-              <View
+              <RecentTransactionItem
                 key={`${tx.id}-${tx.createdAt ?? tx.occurredAt ?? idx}`}
-                className={`flex-row items-center px-4 py-3 ${idx < recent.length - 1 ? 'border-b border-gray-100' : ''}`}
-              >
-                <View
-                  className="w-9 h-9 rounded-full items-center justify-center mr-3"
-                  style={{ backgroundColor: color + '18' }}
-                >
-                  <Ionicons name={txIcon(tx.type)} size={16} color={color} />
-                </View>
-                <View className="flex-1">
-                  <Text className="text-gray-800 text-sm font-semibold">
-                    {txLabel(tx.type)}
-                  </Text>
-                  <Text className="text-gray-400 text-xs mt-0.5" numberOfLines={1}>
-                    {tx.counterpartyLabel ?? tx.counterparty ?? (tx.counterpartyUserId ? 'Resolving user...' : undefined) ?? tx.description ?? tx.currency}
-                  </Text>
-                </View>
-                <View className="items-end">
-                  <Text style={{ color }} className="text-sm font-semibold">
-                    {(credit ? '+' : '-')} {formatCurrency(tx.amountMinor, tx.currency)}
-                  </Text>
-                  <View className={`mt-1 px-2 py-0.5 rounded-full ${statusBg(tx.status)}`}>
-                    <Text className={`text-[10px] font-semibold uppercase ${statusText(tx.status)}`}>{tx.status}</Text>
-                  </View>
-                </View>
-              </View>
-                );
-              })()
+                tx={tx}
+                index={idx}
+                total={recent.length}
+              />
             ))}
           </View>
         )}
