@@ -27,15 +27,27 @@ You can start developing by editing the files inside the **app** directory. This
 
 ## API setup
 
-The frontend reads `EXPO_PUBLIC_API_BASE_URL` from `.env` and sends all Axios requests through that base URL.
+The frontend routes requests to backend microservices using environment variables in `.env`:
 
-For a local backend running in Docker:
+- `EXPO_PUBLIC_AUTH_SERVICE_URL`
+- `EXPO_PUBLIC_USER_SERVICE_URL`
+- `EXPO_PUBLIC_WALLET_SERVICE_URL`
+- `EXPO_PUBLIC_PAYMENT_SERVICE_URL`
+- `EXPO_PUBLIC_TRANSACTION_SERVICE_URL`
 
-- iOS simulator and web: `http://localhost:8080`
-- Android emulator: `http://10.0.2.2:8080`
-- Physical device: use your machine's LAN IP, for example `http://192.168.1.25:8080`
+Example for deployed Render services:
 
-If `EXPO_PUBLIC_API_BASE_URL` is not set, the app falls back to `http://localhost:8080` on iOS/web and `http://10.0.2.2:8080` on Android.
+```bash
+EXPO_PUBLIC_AUTH_SERVICE_URL=https://tanina-auth-service.onrender.com
+EXPO_PUBLIC_USER_SERVICE_URL=https://tanina-user-service.onrender.com
+EXPO_PUBLIC_WALLET_SERVICE_URL=https://tanina-wallet-service.onrender.com
+EXPO_PUBLIC_PAYMENT_SERVICE_URL=https://tanina-payment-service.onrender.com
+EXPO_PUBLIC_TRANSACTION_SERVICE_URL=https://tanina-transaction-service.onrender.com
+```
+
+Optional gateway mode:
+
+- If you set `EXPO_PUBLIC_API_BASE_URL`, it overrides per-service routing and sends all API requests through that single base URL.
 
 ## Get a fresh project
 

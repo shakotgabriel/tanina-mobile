@@ -105,102 +105,104 @@ export default function MerchantDirectoryScreen() {
   };
 
   return (
-    <ActionScreen title="Merchant Directory">
-      <View className="gap-3">
-        <TextInput
-          className="bg-white border border-gray-200 rounded-xl px-4 py-3 text-gray-900"
-          placeholder="Search by name, code, category, or city"
-          placeholderTextColor="#94A3B8"
-          value={search}
-          onChangeText={setSearch}
-        />
+    <ActionScreen title="Merchant Directory" scrollable={false}>
+      <View className="flex-1">
+        <View className="gap-3">
+          <TextInput
+            className="bg-white border border-gray-200 rounded-xl px-4 py-3 text-gray-900"
+            placeholder="Search by name, code, category, or city"
+            placeholderTextColor="#94A3B8"
+            value={search}
+            onChangeText={setSearch}
+          />
 
-        {favoriteMerchants.length > 0 && !search ? (
-          <View className="bg-white border border-gray-100 rounded-xl p-4">
-            <Text className="text-gray-700 text-sm font-semibold mb-2">Favorites</Text>
-            <View className="gap-2">
-              {favoriteMerchants.map((merchant) => (
-                <TouchableOpacity
-                  key={`fav-${merchant.code}`}
-                  onPress={() => selectMerchant(merchant)}
-                  className="flex-row items-center justify-between"
-                >
-                  <Text className="text-gray-800 text-sm font-medium">{merchant.name}</Text>
-                  <Text className="text-[#2F6B2F] text-xs">{merchant.code}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
-        ) : null}
-
-        {recentMerchants.length > 0 && !search ? (
-          <View className="bg-white border border-gray-100 rounded-xl p-4">
-            <Text className="text-gray-700 text-sm font-semibold mb-2">Recent</Text>
-            <View className="gap-2">
-              {recentMerchants.map((merchant) => (
-                <TouchableOpacity
-                  key={`recent-${merchant.code}`}
-                  onPress={() => selectMerchant(merchant)}
-                  className="flex-row items-center justify-between"
-                >
-                  <Text className="text-gray-800 text-sm font-medium">{merchant.name}</Text>
-                  <Text className="text-gray-500 text-xs">{merchant.city}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
-        ) : null}
-      </View>
-
-      <FlatList
-        data={filtered}
-        keyExtractor={(item) => item.code}
-        className="mt-4"
-        contentContainerStyle={{ gap: 10, paddingBottom: 20 }}
-        renderItem={({ item }) => {
-          const isFavorite = favorites.includes(item.code);
-
-          return (
-            <TouchableOpacity
-              onPress={() => selectMerchant(item)}
-              activeOpacity={0.8}
-              className="bg-white border border-gray-100 rounded-xl p-4"
-            >
-              <View className="flex-row items-start justify-between">
-                <View className="flex-1 pr-3">
-                  <Text className="text-gray-900 text-base font-bold">{item.name}</Text>
-                  <Text className="text-gray-500 text-xs mt-1">{item.category} · {item.city}</Text>
-                  <Text className="text-gray-500 text-xs mt-1">{item.description}</Text>
-                </View>
-                <TouchableOpacity onPress={() => toggleFavorite(item.code)} className="p-1">
-                  <Ionicons
-                    name={isFavorite ? 'star' : 'star-outline'}
-                    size={20}
-                    color={isFavorite ? '#D97706' : '#94A3B8'}
-                  />
-                </TouchableOpacity>
+          {favoriteMerchants.length > 0 && !search ? (
+            <View className="bg-white border border-gray-100 rounded-xl p-4">
+              <Text className="text-gray-700 text-sm font-semibold mb-2">Favorites</Text>
+              <View className="gap-2">
+                {favoriteMerchants.map((merchant) => (
+                  <TouchableOpacity
+                    key={`fav-${merchant.code}`}
+                    onPress={() => selectMerchant(merchant)}
+                    className="flex-row items-center justify-between"
+                  >
+                    <Text className="text-gray-800 text-sm font-medium">{merchant.name}</Text>
+                    <Text className="text-[#2F6B2F] text-xs">{merchant.code}</Text>
+                  </TouchableOpacity>
+                ))}
               </View>
+            </View>
+          ) : null}
 
-              <View className="flex-row items-center justify-between mt-3">
-                <Text className="text-[#2F6B2F] text-sm font-semibold">Code: {item.code}</Text>
-                <Text className="text-amber-600 text-xs font-semibold">{item.rating.toFixed(1)} ★</Text>
+          {recentMerchants.length > 0 && !search ? (
+            <View className="bg-white border border-gray-100 rounded-xl p-4">
+              <Text className="text-gray-700 text-sm font-semibold mb-2">Recent</Text>
+              <View className="gap-2">
+                {recentMerchants.map((merchant) => (
+                  <TouchableOpacity
+                    key={`recent-${merchant.code}`}
+                    onPress={() => selectMerchant(merchant)}
+                    className="flex-row items-center justify-between"
+                  >
+                    <Text className="text-gray-800 text-sm font-medium">{merchant.name}</Text>
+                    <Text className="text-gray-500 text-xs">{merchant.city}</Text>
+                  </TouchableOpacity>
+                ))}
               </View>
+            </View>
+          ) : null}
+        </View>
 
+        <FlatList
+          data={filtered}
+          keyExtractor={(item) => item.code}
+          style={{ marginTop: 16, flex: 1 }}
+          contentContainerStyle={{ gap: 10, paddingBottom: 20 }}
+          renderItem={({ item }) => {
+            const isFavorite = favorites.includes(item.code);
+
+            return (
               <TouchableOpacity
                 onPress={() => selectMerchant(item)}
-                className="mt-3 bg-[#2F6B2F] rounded-lg py-2.5 items-center"
+                activeOpacity={0.8}
+                className="bg-white border border-gray-100 rounded-xl p-4"
               >
-                <Text className="text-white font-semibold text-sm">Quick Pay</Text>
+                <View className="flex-row items-start justify-between">
+                  <View className="flex-1 pr-3">
+                    <Text className="text-gray-900 text-base font-bold">{item.name}</Text>
+                    <Text className="text-gray-500 text-xs mt-1">{item.category} · {item.city}</Text>
+                    <Text className="text-gray-500 text-xs mt-1">{item.description}</Text>
+                  </View>
+                  <TouchableOpacity onPress={() => toggleFavorite(item.code)} className="p-1">
+                    <Ionicons
+                      name={isFavorite ? 'star' : 'star-outline'}
+                      size={20}
+                      color={isFavorite ? '#D97706' : '#94A3B8'}
+                    />
+                  </TouchableOpacity>
+                </View>
+
+                <View className="flex-row items-center justify-between mt-3">
+                  <Text className="text-[#2F6B2F] text-sm font-semibold">Code: {item.code}</Text>
+                  <Text className="text-amber-600 text-xs font-semibold">{item.rating.toFixed(1)} ★</Text>
+                </View>
+
+                <TouchableOpacity
+                  onPress={() => selectMerchant(item)}
+                  className="mt-3 bg-[#2F6B2F] rounded-lg py-2.5 items-center"
+                >
+                  <Text className="text-white font-semibold text-sm">Quick Pay</Text>
+                </TouchableOpacity>
               </TouchableOpacity>
-            </TouchableOpacity>
-          );
-        }}
-        ListEmptyComponent={
-          <View className="items-center py-12">
-            <Text className="text-gray-400 text-sm">No merchants found</Text>
-          </View>
-        }
-      />
+            );
+          }}
+          ListEmptyComponent={
+            <View className="items-center py-12">
+              <Text className="text-gray-400 text-sm">No merchants found</Text>
+            </View>
+          }
+        />
+      </View>
     </ActionScreen>
   );
 }

@@ -39,6 +39,7 @@ import {
 } from '@/src/types';
 import { useAuthStore } from '@/src/lib/store/authStore';
 import { Buffer } from 'buffer';
+import { AxiosError } from 'axios';
 
 export type LoginPayload = LoginRequest;
 
@@ -69,6 +70,11 @@ type AnyObject = Record<string, unknown>;
 
 const fetchSessionUser = async (): Promise<AuthMeResponse> => {
   const response = await apiClient.get<AuthMeResponse | ApiResponse<AuthMeResponse>>(ENDPOINTS.auth.me);
+  return unwrapApiData(response.data);
+};
+
+const fetchCurrentUserProfile = async (): Promise<UserDTO> => {
+  const response = await apiClient.get<UserDTO | ApiResponse<UserDTO>>(ENDPOINTS.users.me);
   return unwrapApiData(response.data);
 };
 
@@ -157,7 +163,12 @@ const normalizeTransaction = (tx: UnifiedTransactionDTO) => {
 };
 
 const decodeUserIdFromAccessToken = (): string | null => {
-  const token = useAuthStore.getState().accessToken;
+  const { accessToken: token, userId } = useAuthStore.getState();
+
+  if (userId) {
+    return userId;
+  }
+
   if (!token) {
     return null;
   }
@@ -321,8 +332,19 @@ export const api = {
     return fetchSessionUser();
   },
   getMe: async () => {
-    const userId = await getCurrentUserId();
-    return api.getUserById(userId);
+    try {
+      return await fetchCurrentUserProfile();
+    } catch (error) {
+      if (error instanceof AxiosError) {
+        const status = error.response?.status;
+        // Keep app usable when profile row has not yet synced to user-service.
+        if (status && [404, 405, 501].includes(status)) {
+          return fetchSessionUser();
+        }
+      }
+
+      throw error;
+    }
   },
 
   getUserById: async (userId: UUID) => {

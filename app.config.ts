@@ -15,10 +15,8 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   },
   android: {
     adaptiveIcon: {
-      backgroundColor: '#E6F4FE',
+      backgroundColor: '#FFFFFF',
       foregroundImage: './assets/images/tani.png',
-      backgroundImage: './assets/images/tani.png',
-      monochromeImage: './assets/images/tani.png',
     },
     edgeToEdgeEnabled: true,
     predictiveBackGestureEnabled: false,
@@ -35,7 +33,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
         image: './assets/images/tani.png',
         imageWidth: 200,
         resizeMode: 'contain',
-        backgroundColor: '#ffffff',
+        backgroundColor: '#2F6B2F',
         dark: {
           backgroundColor: '#000000',
         },

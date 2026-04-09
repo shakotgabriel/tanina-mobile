@@ -1,41 +1,222 @@
+import { Link } from 'expo-router';
 import { useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import {
+  Image,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
+import { notify } from '@/src/lib/utils/notify';
 
-import { Button, Input } from '@/src/components/common';
-import Screen from '@/src/components/layout/Screen';
 import { useForgotPassword } from '@/src/features/auth/hooks/useAuth';
 
 export default function ForgotPasswordScreen() {
   const forgotPassword = useForgotPassword();
   const [email, setEmail] = useState('');
+  const [submittedEmail, setSubmittedEmail] = useState<string | null>(null);
+
+  const normalizedEmail = email.trim().toLowerCase();
+  const canSubmit = normalizedEmail.length > 0 && !forgotPassword.isPending;
+
+  const handleReset = () => {
+    if (!normalizedEmail.includes('@')) {
+      notify.validation('Invalid email');
+      return;
+    }
+
+    forgotPassword.mutate(
+      { email: normalizedEmail },
+      {
+        onSuccess: () => {
+          setSubmittedEmail(normalizedEmail);
+        },
+      }
+    );
+  };
 
   return (
-    <Screen>
-      <View style={styles.container}>
-        <Text style={styles.title}>Forgot password</Text>
-        <Text style={styles.description}>Enter your email and we will send reset instructions.</Text>
-        <Input label="Email" value={email} onChangeText={setEmail} autoCapitalize="none" />
-        <Button onPress={() => forgotPassword.mutate({ email })}>
-          {forgotPassword.isPending ? 'Sending...' : 'Send reset link'}
-        </Button>
-      </View>
-    </Screen>
+    <SafeAreaView style={styles.root} edges={['top']}>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+        <View style={styles.header}>
+          <Image
+            source={require('../../../../assets/images/tani.png')}
+            style={styles.logo}
+            resizeMode="contain"
+          />
+          <Text style={styles.headline}>Recover your account</Text>
+          <Text style={styles.subtitle}>We’ll send a reset link to your email</Text>
+        </View>
+
+        <ScrollView
+          style={styles.card}
+          contentContainerStyle={styles.cardContent}
+          keyboardShouldPersistTaps="handled"
+          bounces={false}
+          showsVerticalScrollIndicator={false}
+        >
+          <Text style={styles.cardTitle}>Reset password</Text>
+          <Text style={styles.description}>
+            Enter the email address linked to your Tanina account. We’ll send a password reset link.
+          </Text>
+
+          <Text style={styles.label}>Email address</Text>
+          <View style={styles.inputRow}>
+            <Ionicons name="mail-outline" size={18} color="#9CA3AF" style={styles.inputIcon} />
+            <TextInput
+              style={styles.input}
+              placeholder="you@example.com"
+              placeholderTextColor="#9CA3AF"
+              value={email}
+              onChangeText={setEmail}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoComplete="email"
+              autoCorrect={false}
+            />
+          </View>
+
+          {submittedEmail ? (
+            <View style={styles.infoBox}>
+              <Text style={styles.infoText}>
+                If {submittedEmail} is registered, you’ll receive reset instructions shortly.
+              </Text>
+            </View>
+          ) : null}
+
+          <TouchableOpacity
+            style={[styles.button, !canSubmit && styles.buttonDisabled]}
+            onPress={handleReset}
+            disabled={!canSubmit}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.buttonText}>
+              {forgotPassword.isPending ? 'Sending reset link…' : 'Send Reset Link'}
+            </Text>
+          </TouchableOpacity>
+
+          <View style={styles.divider}>
+            <View style={styles.dividerLine} />
+            <Text style={styles.dividerText}>Remembered your password?</Text>
+            <View style={styles.dividerLine} />
+          </View>
+
+          <Link href="/login" asChild>
+            <TouchableOpacity style={styles.outlineButton} activeOpacity={0.8}>
+              <Text style={styles.outlineButtonText}>Back to Sign In</Text>
+            </TouchableOpacity>
+          </Link>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    justifyContent: 'center',
-    gap: 12,
+  root: { flex: 1, backgroundColor: '#2F6B2F' },
+  header: {
+    paddingHorizontal: 28,
+    paddingTop: 16,
+    paddingBottom: 32,
+    alignItems: 'center',
   },
-  title: {
-    fontSize: 24,
+  logo: { width: 150, height: 42, tintColor: '#FFFFFF', marginBottom: 18 },
+  headline: {
+    fontSize: 26,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    marginBottom: 6,
+    letterSpacing: -0.3,
+  },
+  subtitle: { fontSize: 14, color: 'rgba(255,255,255,0.7)', textAlign: 'center' },
+  card: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+  },
+  cardContent: { padding: 24, paddingBottom: 48 },
+  cardTitle: {
+    fontSize: 22,
     fontWeight: '700',
-    color: '#0F172A',
+    color: '#111827',
+    marginBottom: 8,
+    letterSpacing: -0.2,
   },
   description: {
-    color: '#475569',
-    marginBottom: 8,
+    color: '#6B7280',
+    fontSize: 13,
+    lineHeight: 20,
+    marginBottom: 18,
   },
+  label: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#374151',
+    marginBottom: 8,
+    marginTop: 4,
+  },
+  inputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F9FAFB',
+    borderWidth: 1.5,
+    borderColor: '#E5E7EB',
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    marginBottom: 16,
+  },
+  inputIcon: { marginRight: 10 },
+  input: { flex: 1, paddingVertical: 14, fontSize: 15, color: '#111827' },
+  infoBox: {
+    borderWidth: 1,
+    borderColor: '#D1E8D1',
+    backgroundColor: '#F0F7F0',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 16,
+  },
+  infoText: {
+    color: '#2F6B2F',
+    fontSize: 12,
+    lineHeight: 18,
+    fontWeight: '500',
+  },
+  button: {
+    backgroundColor: '#2F6B2F',
+    borderRadius: 14,
+    paddingVertical: 16,
+    alignItems: 'center',
+    marginBottom: 24,
+    boxShadow: '0px 4px 8px rgba(47, 107, 47, 0.25)',
+    elevation: 4,
+  },
+  buttonDisabled: { opacity: 0.65 },
+  buttonText: { color: '#FFFFFF', fontSize: 16, fontWeight: '700', letterSpacing: 0.2 },
+  divider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 20,
+  },
+  dividerLine: { flex: 1, height: 1, backgroundColor: '#E5E7EB' },
+  dividerText: { fontSize: 12, color: '#9CA3AF', fontWeight: '500' },
+  outlineButton: {
+    borderWidth: 1.5,
+    borderColor: '#2F6B2F',
+    borderRadius: 14,
+    paddingVertical: 15,
+    alignItems: 'center',
+  },
+  outlineButtonText: { color: '#2F6B2F', fontSize: 16, fontWeight: '700' },
 });

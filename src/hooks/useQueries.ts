@@ -19,8 +19,9 @@ import { useAuthStore } from '@/src/lib/store/authStore';
 
 export const useProfileQuery = (enabled = true) => {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const authCacheKey = useAuthStore((state) => state.userId ?? state.accessToken ?? 'anonymous');
   return useQuery({
-    queryKey: ['profile'],
+    queryKey: ['profile', authCacheKey],
     queryFn: api.getMe,
     enabled: enabled && isAuthenticated,
     staleTime: 5 * 60 * 1000, // 5 minutes
@@ -30,8 +31,9 @@ export const useProfileQuery = (enabled = true) => {
 
 export const useSessionQuery = (enabled = true) => {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const authCacheKey = useAuthStore((state) => state.userId ?? state.accessToken ?? 'anonymous');
   return useQuery({
-    queryKey: ['session'],
+    queryKey: ['session', authCacheKey],
     queryFn: api.getSessionUser,
     enabled: enabled && isAuthenticated,
     staleTime: 5 * 60 * 1000,
@@ -41,8 +43,9 @@ export const useSessionQuery = (enabled = true) => {
 
 export const useBalancesQuery = (enabled = true, activeScreen = false) => {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const authCacheKey = useAuthStore((state) => state.userId ?? state.accessToken ?? 'anonymous');
   return useQuery({
-    queryKey: ['balances'],
+    queryKey: ['balances', authCacheKey],
     queryFn: api.getBalances,
     enabled: enabled && isAuthenticated,
     staleTime: activeScreen ? 30 * 1000 : 2 * 60 * 1000,
@@ -54,8 +57,9 @@ export const useBalancesQuery = (enabled = true, activeScreen = false) => {
 
 export const useTransactionsQuery = (enabled = false) => {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const authCacheKey = useAuthStore((state) => state.userId ?? state.accessToken ?? 'anonymous');
   return useQuery({
-    queryKey: ['transactions'],
+    queryKey: ['transactions', authCacheKey],
     queryFn: api.getTransactions,
     enabled: enabled && isAuthenticated, // Disabled by default, enable only when needed
     staleTime: 3 * 60 * 1000, // 3 minutes

@@ -87,7 +87,10 @@ function Header({ user, isLoading }: HeaderProps) {
 }
 
 export default function TabsLayout() {
+  const insets = useSafeAreaInsets();
   const { data: session, isLoading } = useSessionQuery(true); // Always enable in header to display user info
+  const tabBarBottomPadding = Math.max(insets.bottom, 10);
+  const tabBarHeight = 58 + tabBarBottomPadding;
   
   const firstName = (session as any)?.firstName ?? '';
   const lastName = (session as any)?.lastName ?? '';
@@ -107,8 +110,8 @@ export default function TabsLayout() {
           backgroundColor: '#FFFFFF',
           borderTopColor: '#F3F4F6',
           borderTopWidth: 1,
-          height: 64,
-          paddingBottom: 40,
+          height: tabBarHeight,
+          paddingBottom: tabBarBottomPadding,
           paddingTop: 6,
           elevation: 8,
           boxShadow: '0px -2px 8px rgba(0, 0, 0, 0.05)',
