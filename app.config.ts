@@ -9,11 +9,12 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   icon: './assets/images/tani.png',
   scheme: 'taninamobile',
   userInterfaceStyle: 'automatic',
-  newArchEnabled: true,
+  newArchEnabled: false,
   ios: {
     supportsTablet: true,
   },
   android: {
+    package: 'com.anonymous.TaninaMobile',
     adaptiveIcon: {
       backgroundColor: '#FFFFFF',
       foregroundImage: './assets/images/tani.png',
