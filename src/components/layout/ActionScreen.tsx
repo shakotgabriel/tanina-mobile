@@ -1,5 +1,5 @@
 import { PropsWithChildren } from 'react';
-import { Image, ScrollView, Text, TouchableOpacity, View } from 'react-native';
+import { Image, Platform, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -30,6 +30,10 @@ export default function ActionScreen({
 }: ActionScreenProps) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const footerBottomPadding = Platform.OS === 'android'
+    ? Math.max(insets.bottom, 14)
+    : Math.max(insets.bottom, 8);
+  const footerTopPadding = Platform.OS === 'android' ? 8 : 6;
   const contentWrapperStyle = {
     width: '100%' as const,
     maxWidth: 520,
@@ -121,7 +125,8 @@ export default function ActionScreen({
           backgroundColor: '#FFFFFF',
           borderTopWidth: 1,
           borderTopColor: '#F3F4F6',
-          paddingBottom: Math.max(insets.bottom, 8),
+          paddingTop: footerTopPadding,
+          paddingBottom: footerBottomPadding,
           elevation: 8,
           boxShadow: '0px -2px 8px rgba(0, 0, 0, 0.05)',
         }}

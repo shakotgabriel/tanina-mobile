@@ -113,20 +113,46 @@ type QueueAwareError = Error & {
   offlineQueued?: boolean;
 };
 
+const AUTH_INVALIDATION_PATHS = [
+  '/api/v1/auth/validate-token',
+  '/api/v1/auth/refresh',
+  '/api/v1/auth/me',
+  '/api/v1/auth/logout',
+];
+
+const shouldClearAuthForUnauthorized = (error: any): boolean => {
+  const requestUrl = String(error?.config?.url ?? '');
+  if (AUTH_INVALIDATION_PATHS.some((path) => requestUrl.includes(path))) {
+    return true;
+  }
+
+  const responseData = error?.response?.data;
+  const message = typeof responseData?.message === 'string' ? responseData.message : '';
+  const errorCode = typeof responseData?.errorCode === 'string' ? responseData.errorCode : '';
+  const combinedSignal = `${message} ${errorCode}`.toLowerCase();
+
+  return (
+    combinedSignal.includes('token expired') ||
+    combinedSignal.includes('invalid token') ||
+    combinedSignal.includes('jwt expired') ||
+    combinedSignal.includes('jwt malformed')
+  );
+};
+
 export const apiClient = axios.create({
   baseURL: gatewayBaseUrl ?? SERVICE_BASE_URLS.auth,
   timeout: 20000,
 });
 
 apiClient.interceptors.request.use((config) => {
-  const { accessToken } = useAuthStore.getState();
+  const { accessToken, userId } = useAuthStore.getState();
 
   if (accessToken) {
     config.headers.Authorization = `Bearer ${accessToken}`;
 
-    const userId = decodeUserIdFromToken(accessToken);
-    if (userId && !config.headers['X-User-Id']) {
-      config.headers['X-User-Id'] = userId;
+    const resolvedUserId = userId ?? decodeUserIdFromToken(accessToken);
+    if (resolvedUserId && !config.headers['X-User-Id']) {
+      config.headers['X-User-Id'] = resolvedUserId;
     }
   }
 
@@ -149,8 +175,8 @@ apiClient.interceptors.response.use(
   async (error) => {
     const status = error?.response?.status;
 
-    if (status === 401) {
-      useAuthStore.getState().clearAuth();
+    if (status === 401 && shouldClearAuthForUnauthorized(error)) {
+      await useAuthStore.getState().clearAuth();
     }
 
     const requestConfig = error?.config;

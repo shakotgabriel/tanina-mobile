@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Modal, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { notify } from '@/src/lib/utils/notify';
@@ -330,9 +330,18 @@ export default function PaymentsScreen() {
             }}
             error={errors.merchantCode}
           />
-          <Button onPress={handleVerifyMerchant} disabled={merchantLookup.isPending || !merchantCode.trim()}>
-            {merchantLookup.isPending ? 'Verifying merchant...' : 'Verify Merchant'}
-          </Button>
+          <TouchableOpacity
+            onPress={handleVerifyMerchant}
+            disabled={merchantLookup.isPending || !merchantCode.trim()}
+            style={[
+              styles.verifyButton,
+              (merchantLookup.isPending || !merchantCode.trim()) && styles.verifyButtonDisabled,
+            ]}
+          >
+            <Text style={styles.verifyButtonText}>
+              {merchantLookup.isPending ? 'Verifying merchant code...' : 'Verify Merchant Code'}
+            </Text>
+          </TouchableOpacity>
           {verifiedMerchant?.userId ? (
             <View className="bg-green-50 border border-green-200 rounded-xl p-3">
               <View className="flex-row items-center justify-between">
@@ -351,9 +360,6 @@ export default function PaymentsScreen() {
               </View>
             </View>
           ) : null}
-          <TouchableOpacity onPress={() => router.push('/(app)/merchant-directory')} className="py-1">
-            <Text className="text-[#2F6B2F] text-sm font-semibold">Search merchant directory</Text>
-          </TouchableOpacity>
           {params.merchantName ? (
             <Text className="text-gray-500 text-xs">Selected: {params.merchantName}</Text>
           ) : null}
@@ -369,9 +375,18 @@ export default function PaymentsScreen() {
             }}
             error={errors.amount}
           />
-          <Button onPress={handlePayMerchant} disabled={merchantPay.isPending || !verifiedMerchant?.userId}>
-            {merchantPay.isPending ? 'Submitting merchant payment...' : 'Continue'}
-          </Button>
+          <TouchableOpacity
+            onPress={handlePayMerchant}
+            disabled={merchantPay.isPending || !verifiedMerchant?.userId}
+            style={[
+              styles.payMerchantButton,
+              (merchantPay.isPending || !verifiedMerchant?.userId) && styles.payMerchantButtonDisabled,
+            ]}
+          >
+            <Text style={styles.payMerchantButtonText}>
+              {merchantPay.isPending ? 'Submitting merchant payment...' : 'Continue to Confirm'}
+            </Text>
+          </TouchableOpacity>
         </View>
       )}
 
@@ -413,12 +428,15 @@ export default function PaymentsScreen() {
             <TouchableOpacity
               onPress={handleConfirmPayment}
               disabled={billPay.isPending || merchantPay.isPending}
-              className="bg-[#2F6B2F] rounded-xl py-4 items-center mb-2"
+              style={[
+                styles.confirmButton,
+                (billPay.isPending || merchantPay.isPending) && styles.confirmButtonDisabled,
+              ]}
             >
               {billPay.isPending || merchantPay.isPending ? (
                 <ActivityIndicator color="#fff" />
               ) : (
-                <Text className="text-white font-bold text-base">Confirm Payment</Text>
+                <Text style={styles.confirmButtonText}>Confirm Payment</Text>
               )}
             </TouchableOpacity>
 
@@ -460,3 +478,53 @@ export default function PaymentsScreen() {
     </ActionScreen>
   );
 }
+
+const styles = StyleSheet.create({
+  verifyButton: {
+    backgroundColor: '#2F6B2F',
+    borderRadius: 12,
+    minHeight: 48,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  verifyButtonDisabled: {
+    opacity: 0.55,
+  },
+  verifyButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  payMerchantButton: {
+    backgroundColor: '#2F6B2F',
+    borderRadius: 12,
+    minHeight: 48,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  payMerchantButtonDisabled: {
+    opacity: 0.55,
+  },
+  payMerchantButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  confirmButton: {
+    backgroundColor: '#2F6B2F',
+    borderRadius: 12,
+    paddingVertical: 16,
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  confirmButtonDisabled: {
+    opacity: 0.6,
+  },
+  confirmButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+});

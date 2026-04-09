@@ -53,9 +53,17 @@ export const useLogin = () => {
   return useMutation({
     mutationFn: (payload: LoginPayload) => api.login(payload),
     onSuccess: async (data: any) => {
-      const token = data?.accessToken ?? data?.token ?? data;
+      const authPayload = data?.data ?? data;
+      const token =
+        authPayload?.accessToken ??
+        authPayload?.token ??
+        data?.accessToken ??
+        data?.token ??
+        (typeof data === 'string' ? data : null);
+      const userId = authPayload?.userId ?? data?.userId ?? null;
+
       if (token && typeof token === 'string') {
-        await setToken(token);
+        await setToken(token, typeof userId === 'string' ? userId : null);
       }
     },
     onError: () => {
@@ -115,10 +123,10 @@ export const useForgotPassword = () => {
   return useMutation({
     mutationFn: (payload: ForgotPasswordRequest) => api.forgotPassword(payload),
     onSuccess: () => {
-      notify.success('Reset email sent', 'Check your inbox for reset instructions.');
+      notify.success('Reset link sent', 'Check your inbox for the Tanina reset email.');
     },
     onError: () => {
-      notify.error('Failed', 'Could not send reset email. Try again.');
+      notify.error('Reset request failed', 'Could not send the reset link. Please try again.');
     },
   });
 };
