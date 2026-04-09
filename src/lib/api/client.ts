@@ -1,45 +1,67 @@
 import axios from 'axios';
-import { Platform } from 'react-native';
 import { Buffer } from 'buffer';
 
 import { flushQueuedMutations, queueMutationRequest } from '@/src/lib/queue/syncQueue';
 import { useAuthStore } from '@/src/lib/store/authStore';
 
-// Service port mapping for direct service endpoints
-const SERVICE_PORTS = {
-  auth: 8089,
-  users: 8081,
-  wallets: 8082,
-  agent: 8082,
-  internal: 8082,
-  'mobile-money': 8084,
-  bills: 8084,
-  cashout: 8084,
-  merchant: 8084,
-  p2p: 8083,
-  fx: 8083,
-} as const;
+const trimTrailingSlash = (value: string) => value.replace(/\/+$/, '');
 
-const getBaseHostname = () => {
-  const hostname = Platform.select({
-    android: '10.0.2.2',
-    default: 'localhost',
-  }) ?? 'localhost';
-  return hostname;
+const normalizeEnvUrl = (value: string | undefined): string | undefined => {
+  if (!value) {
+    return undefined;
+  }
+
+  return trimTrailingSlash(value);
 };
 
-const getServicePort = (path: string): number => {
-  // Extract service name from path (e.g., /api/v1/auth/* → auth)
-  const match = path.match(/\/api\/v1\/([a-z0-9-]+)/);
-  const service = match?.[1] as keyof typeof SERVICE_PORTS;
+const ENV_URLS = {
+  gateway: normalizeEnvUrl(process.env.EXPO_PUBLIC_API_BASE_URL),
+  auth: normalizeEnvUrl(process.env.EXPO_PUBLIC_AUTH_SERVICE_URL),
+  users: normalizeEnvUrl(process.env.EXPO_PUBLIC_USER_SERVICE_URL),
+  wallets: normalizeEnvUrl(process.env.EXPO_PUBLIC_WALLET_SERVICE_URL),
+  payment: normalizeEnvUrl(process.env.EXPO_PUBLIC_PAYMENT_SERVICE_URL),
+  transactions: normalizeEnvUrl(process.env.EXPO_PUBLIC_TRANSACTION_SERVICE_URL),
+} as const;
 
-  return SERVICE_PORTS[service] || 8089; // fallback to auth service instead of gateway
+const gatewayBaseUrl = ENV_URLS.gateway;
+
+const SERVICE_BASE_URLS = {
+  auth: ENV_URLS.auth ?? 'https://tanina-auth-service.onrender.com',
+  users: ENV_URLS.users ?? 'https://tanina-user-service.onrender.com',
+  wallets: ENV_URLS.wallets ?? 'https://tanina-wallet-service.onrender.com',
+  agent: ENV_URLS.wallets ?? 'https://tanina-wallet-service.onrender.com',
+  internal: ENV_URLS.wallets ?? 'https://tanina-wallet-service.onrender.com',
+  'mobile-money': ENV_URLS.payment ?? 'https://tanina-payment-service.onrender.com',
+  bills: ENV_URLS.payment ?? 'https://tanina-payment-service.onrender.com',
+  cashout: ENV_URLS.payment ?? 'https://tanina-payment-service.onrender.com',
+  merchant: ENV_URLS.payment ?? 'https://tanina-payment-service.onrender.com',
+  p2p: ENV_URLS.transactions ?? 'https://tanina-transaction-service.onrender.com',
+  fx: ENV_URLS.transactions ?? 'https://tanina-transaction-service.onrender.com',
+} as const;
+
+const getServiceName = (path: string): keyof typeof SERVICE_BASE_URLS => {
+  const match = path.match(/\/api\/v1\/([a-z0-9-]+)/);
+  const service = match?.[1] as keyof typeof SERVICE_BASE_URLS | undefined;
+
+  if (service && SERVICE_BASE_URLS[service]) {
+    return service;
+  }
+
+  // Legacy routes in this app that don't follow /api/v1/*.
+  if (path.startsWith('/user/')) {
+    return 'users';
+  }
+
+  return 'auth';
 };
 
 const getServiceBaseUrl = (path: string): string => {
-  const hostname = getBaseHostname();
-  const port = getServicePort(path);
-  return `http://${hostname}:${port}`;
+  if (gatewayBaseUrl) {
+    return gatewayBaseUrl;
+  }
+
+  const service = getServiceName(path);
+  return SERVICE_BASE_URLS[service];
 };
 
 const decodeUserIdFromToken = (token: string): string | null => {
@@ -92,7 +114,7 @@ type QueueAwareError = Error & {
 };
 
 export const apiClient = axios.create({
-  baseURL: 'http://localhost', // placeholder, will be overridden in interceptor
+  baseURL: gatewayBaseUrl ?? SERVICE_BASE_URLS.auth,
   timeout: 20000,
 });
 
