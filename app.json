@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "TaninaMobile",
-    "slug": "TaninaMobile",
+    "slug": "tanina",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/tani.png",
@@ -12,7 +12,7 @@
       "supportsTablet": true
     },
     "android": {
-      "package": "com.anonymous.TaninaMobile",
+      "package": "com.anonymous.tanina",
       "adaptiveIcon": {
         "backgroundColor": "#FFFFFF",
         "foregroundImage": "./assets/images/tani.png"
@@ -43,6 +43,13 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "afc87935-d544-49a6-a6d5-4d96728a181a"
+      }
+    },
+    "owner": "shakotgdaniels-organization"
   }
 }

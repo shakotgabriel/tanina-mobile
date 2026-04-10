@@ -3,7 +3,7 @@ import { ExpoConfig, ConfigContext } from 'expo/config';
 export default (({ config }) => ({
   ...config,
   name: 'TaninaMobile',
-  slug: 'TaninaMobile',
+  slug: 'tanina',
   version: '1.0.0',
   orientation: 'portrait',
   icon: './assets/images/tani.png',
