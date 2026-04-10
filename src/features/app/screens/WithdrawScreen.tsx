@@ -1,10 +1,10 @@
 import { useMemo, useState } from 'react';
-import { Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { notify } from '@/src/lib/utils/notify';
 
-import { Button, Input } from '@/src/components/common';
+import { Input } from '@/src/components/common';
 import ActionScreen from '@/src/components/layout/ActionScreen';
 import MethodSelector, { Method } from '@/src/features/app/components/MethodSelector';
 import CountryPicker, {
@@ -15,6 +15,7 @@ import { useWithdrawalInitiateMutation, useWithdrawalConfirmMutation } from '@/s
 
 type Step = 'select_method' | 'select_country' | 'form';
 type WithdrawMethod = 'agent';
+type WithdrawPhase = 'entry' | 'otp' | 'success';
 
 const WITHDRAW_METHODS: Method[] = [
   {
@@ -37,8 +38,7 @@ export default function WithdrawScreen() {
   const [amount, setAmount] = useState('');
   const [otp, setOtp] = useState('');
   const [withdrawalId, setWithdrawalId] = useState<string | null>(null);
-  const [otpStep, setOtpStep] = useState(false);
-  const [success, setSuccess] = useState(false);
+  const [phase, setPhase] = useState<WithdrawPhase>('entry');
 
   const formValues = useMemo(
     () => ({ agentUserId, amount, otp }),
@@ -56,8 +56,19 @@ export default function WithdrawScreen() {
     formValues
   );
 
+  const extractErrorMessage = (error: unknown, fallback: string) => {
+    const data = (error as any)?.response?.data;
+    const message = data?.message ?? data?.error ?? (error as any)?.message;
+    return typeof message === 'string' && message.trim() ? message : fallback;
+  };
+
   function handleBack() {
-    if (step === 'form' && method === 'agent') {
+    if (step === 'form' && phase === 'otp') {
+      setPhase('entry');
+      setOtp('');
+    } else if (step === 'form' && phase === 'success') {
+      router.back();
+    } else if (step === 'form' && method === 'agent') {
       setStep('select_country');
     } else if (step === 'select_country') {
       setStep('select_method');
@@ -70,11 +81,17 @@ export default function WithdrawScreen() {
 
   function handleMethodSelect(id: string) {
     setMethod(id as WithdrawMethod);
+    setPhase('entry');
+    setOtp('');
+    setWithdrawalId(null);
     setStep('select_country');
   }
 
   function handleCountrySelect(c: Country) {
     setCountry(c);
+    setPhase('entry');
+    setOtp('');
+    setWithdrawalId(null);
     setStep('form');
   }
 
@@ -100,18 +117,30 @@ export default function WithdrawScreen() {
       },
       {
         onSuccess: (data: any) => {
-          setWithdrawalId(data.id);
-          setOtpStep(true);
+          const nextWithdrawalId = data?.id ?? data?.cashoutId ?? data?.withdrawalId;
+          if (!nextWithdrawalId) {
+            notify.error('Withdrawal request failed', 'Unable to start OTP verification');
+            return;
+          }
+
+          setWithdrawalId(nextWithdrawalId);
+          setPhase('otp');
           notify.info('Verify with OTP', 'Check your email/SMS for the OTP code');
         },
-        onError: () => {
-          notify.error('Withdrawal request failed', 'Please try again');
+        onError: (error) => {
+          notify.error('Withdrawal request failed', extractErrorMessage(error, 'Please try again'));
         },
       }
     );
   };
 
   const handleConfirmWithdrawal = () => {
+    if (!withdrawalId) {
+      notify.error('Withdrawal request failed', 'Start a withdrawal request first');
+      setPhase('entry');
+      return;
+    }
+
     if (validateField('otp', otp)) {
       notify.validation('Enter a valid OTP');
       return;
@@ -124,10 +153,10 @@ export default function WithdrawScreen() {
       },
       {
         onSuccess: () => {
-          setSuccess(true);
+          setPhase('success');
         },
-        onError: () => {
-          notify.error('OTP verification failed', 'Please check your code and try again');
+        onError: (error) => {
+          notify.error('OTP verification failed', extractErrorMessage(error, 'Please check your code and try again'));
         },
       }
     );
@@ -149,7 +178,7 @@ export default function WithdrawScreen() {
         <CountryPicker onSelect={handleCountrySelect} selected={country?.code} />
       )}
 
-      {step === 'form' && method === 'agent' && country && (
+      {step === 'form' && method === 'agent' && country && phase === 'entry' && (
         <View className="gap-4">
           <View className="flex-row items-center gap-3 bg-[#2F6B2F]/5 rounded-xl p-3 mb-1">
             <Text style={{ fontSize: 24 }}>{country.flag}</Text>
@@ -186,16 +215,23 @@ export default function WithdrawScreen() {
             }}
             error={errors.amount}
           />
-          <Button onPress={handleAgentWithdraw} disabled={initiateWithdrawal.isPending}>
-            {initiateWithdrawal.isPending ? 'Requesting OTP...' : 'Continue'}
-          </Button>
+          <TouchableOpacity
+            onPress={handleAgentWithdraw}
+            disabled={initiateWithdrawal.isPending}
+            activeOpacity={0.85}
+            style={[styles.ctaButton, initiateWithdrawal.isPending && styles.ctaDisabled]}
+          >
+            <Text style={styles.ctaButtonLabel}>
+              {initiateWithdrawal.isPending ? 'Requesting OTP...' : 'Continue'}
+            </Text>
+          </TouchableOpacity>
           {initiateWithdrawal.isPending ? (
             <Text className="text-gray-500 text-xs">Submitting request and waiting for OTP challenge...</Text>
           ) : null}
         </View>
       )}
 
-      {otpStep && !success && (
+      {step === 'form' && phase === 'otp' && (
         <View className="gap-4">
           <View className="items-center py-6">
             <View className="w-16 h-16 rounded-full bg-amber-100 items-center justify-center mb-3">
@@ -211,7 +247,7 @@ export default function WithdrawScreen() {
             <Text className="text-gray-700 text-sm font-medium">OTP Code</Text>
             <TextInput
               className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3.5 text-gray-900 text-lg tracking-widest font-bold text-center"
-              placeholder={otpStep ? 'Enter 6-digit OTP' : ''}
+              placeholder="Enter 6-digit OTP"
               placeholderTextColor="#9CA3AF"
               keyboardType="number-pad"
               maxLength={6}
@@ -221,23 +257,36 @@ export default function WithdrawScreen() {
                 touchField('otp');
                 validateField('otp', value);
               }}
-              editable={otpStep}
+              editable
             />
             {errors.otp ? <Text className="text-red-700 text-xs mt-1">{errors.otp}</Text> : null}
             <Text className="text-gray-500 text-xs mt-1">Code expires in 5 minutes.</Text>
           </View>
 
-          <Button onPress={handleConfirmWithdrawal} disabled={confirmWithdrawal.isPending}>
-            {confirmWithdrawal.isPending ? 'Verifying...' : 'Confirm Withdrawal'}
-          </Button>
+          <TouchableOpacity
+            onPress={handleConfirmWithdrawal}
+            disabled={confirmWithdrawal.isPending}
+            activeOpacity={0.85}
+            style={[styles.ctaButton, confirmWithdrawal.isPending && styles.ctaDisabled]}
+          >
+            <Text style={styles.ctaButtonLabel}>
+              {confirmWithdrawal.isPending ? 'Verifying...' : 'Confirm Withdrawal'}
+            </Text>
+          </TouchableOpacity>
 
-          <TouchableOpacity onPress={() => setOtpStep(false)} className="items-center py-2">
+          <TouchableOpacity
+            onPress={() => {
+              setPhase('entry');
+              setOtp('');
+              setWithdrawalId(null);
+            }}
+            className="items-center py-2">
             <Text className="text-gray-500 text-sm">Didn&apos;t receive code? Request new one</Text>
           </TouchableOpacity>
         </View>
       )}
 
-      {success && (
+      {step === 'form' && phase === 'success' && (
         <View className="flex-1 items-center justify-center py-12 gap-4">
           <View className="w-20 h-20 rounded-full bg-green-100 items-center justify-center">
             <Ionicons name="checkmark" size={40} color="#16A34A" />
@@ -257,3 +306,23 @@ export default function WithdrawScreen() {
     </ActionScreen>
   );
 }
+
+const styles = StyleSheet.create({
+  ctaButton: {
+    minHeight: 48,
+    borderRadius: 12,
+    backgroundColor: '#2F6B2F',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+  },
+  ctaDisabled: {
+    opacity: 0.55,
+  },
+  ctaButtonLabel: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+});

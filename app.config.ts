@@ -1,6 +1,6 @@
 import { ExpoConfig, ConfigContext } from 'expo/config';
 
-export default ({ config }: ConfigContext): ExpoConfig => ({
+export default (({ config }) => ({
   ...config,
   name: 'TaninaMobile',
   slug: 'TaninaMobile',
@@ -9,7 +9,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   icon: './assets/images/tani.png',
   scheme: 'taninamobile',
   userInterfaceStyle: 'automatic',
-  newArchEnabled: false,
+  newArchEnabled: true,
   ios: {
     supportsTablet: true,
   },
@@ -46,4 +46,4 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     typedRoutes: true,
     reactCompiler: true,
   },
-});
+}));
