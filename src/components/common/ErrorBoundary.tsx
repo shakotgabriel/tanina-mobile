@@ -1,105 +1,88 @@
-import React, { Component, ErrorInfo, PropsWithChildren } from 'react';
+import type { ReactNode } from 'react';
+import { Component } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-interface ErrorBoundaryState {
-  hasError: boolean;
-  error: Error | null;
-}
+type ErrorBoundaryProps = {
+	children: ReactNode;
+	fallbackTitle?: string;
+	fallbackMessage?: string;
+};
 
-interface ErrorFallbackProps {
-  error: Error | null;
-  onRetry: () => void;
-}
+type ErrorBoundaryState = {
+	hasError: boolean;
+};
 
-function ErrorFallback({ error, onRetry }: ErrorFallbackProps) {
-  return (
-    <View style={styles.container}>
-      <View style={styles.card}>
-        <Text style={styles.title}>Something went wrong</Text>
-        <Text style={styles.description}>
-          We hit an unexpected error. Your session is safe, and you can try again.
-        </Text>
-        {error?.message ? <Text style={styles.errorText}>{error.message}</Text> : null}
-        <Pressable onPress={onRetry} style={styles.button}>
-          <Text style={styles.buttonText}>Try again</Text>
-        </Pressable>
-      </View>
-    </View>
-  );
-}
+export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+	state: ErrorBoundaryState = {
+		hasError: false,
+	};
 
-export class ErrorBoundary extends Component<PropsWithChildren, ErrorBoundaryState> {
-  state: ErrorBoundaryState = {
-    hasError: false,
-    error: null,
-  };
+	static getDerivedStateFromError(): ErrorBoundaryState {
+		return { hasError: true };
+	}
 
-  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
-    return { hasError: true, error };
-  }
+	componentDidCatch(error: Error) {
+		console.error('Unhandled UI error caught by ErrorBoundary:', error);
+	}
 
-  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    console.error('Unhandled render error caught by ErrorBoundary', error, errorInfo);
-  }
+	private handleRetry = () => {
+		this.setState({ hasError: false });
+	};
 
-  private resetError = () => {
-    this.setState({ hasError: false, error: null });
-  };
+	render() {
+		if (this.state.hasError) {
+			return (
+				<View style={styles.container}>
+					<Text style={styles.title}>{this.props.fallbackTitle ?? 'Something went wrong'}</Text>
+					<Text style={styles.message}>
+						{this.props.fallbackMessage ?? 'Please try again. If the issue persists, restart the app.'}
+					</Text>
+					<Pressable accessibilityRole="button" onPress={this.handleRetry} style={styles.button}>
+						<Text style={styles.buttonLabel}>Try again</Text>
+					</Pressable>
+				</View>
+			);
+		}
 
-  render() {
-    if (this.state.hasError) {
-      return <ErrorFallback error={this.state.error} onRetry={this.resetError} />;
-    }
-
-    return this.props.children;
-  }
+		return this.props.children;
+	}
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F8FAFC',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 24,
-  },
-  card: {
-    width: '100%',
-    maxWidth: 420,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 20,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    gap: 12,
-  },
-  title: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#0F172A',
-  },
-  description: {
-    fontSize: 14,
-    lineHeight: 20,
-    color: '#475569',
-  },
-  errorText: {
-    fontSize: 12,
-    color: '#B91C1C',
-    backgroundColor: '#FEE2E2',
-    padding: 10,
-    borderRadius: 8,
-  },
-  button: {
-    marginTop: 4,
-    backgroundColor: '#2F6B2F',
-    borderRadius: 10,
-    paddingVertical: 12,
-    alignItems: 'center',
-  },
-  buttonText: {
-    color: '#FFFFFF',
-    fontWeight: '700',
-    fontSize: 15,
-  },
+	container: {
+		flex: 1,
+		justifyContent: 'center',
+		alignItems: 'center',
+		padding: 24,
+		backgroundColor: '#F8FAFC',
+	},
+	title: {
+		fontSize: 22,
+		lineHeight: 28,
+		fontWeight: '700',
+		color: '#0F172A',
+		textAlign: 'center',
+		marginBottom: 12,
+	},
+	message: {
+		fontSize: 15,
+		lineHeight: 22,
+		color: '#475569',
+		textAlign: 'center',
+		marginBottom: 20,
+	},
+	button: {
+		minHeight: 44,
+		borderRadius: 12,
+		backgroundColor: '#0EA5E9',
+		paddingHorizontal: 18,
+		paddingVertical: 10,
+		justifyContent: 'center',
+		alignItems: 'center',
+	},
+	buttonLabel: {
+		color: '#FFFFFF',
+		fontSize: 15,
+		fontWeight: '600',
+	},
 });

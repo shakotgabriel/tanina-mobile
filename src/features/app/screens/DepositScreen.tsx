@@ -1,10 +1,10 @@
 import { useMemo, useState } from 'react';
-import { Text, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { notify } from '@/src/lib/utils/notify';
 
-import { Button, Input } from '@/src/components/common';
+import { Input } from '@/src/components/common';
 import ActionScreen from '@/src/components/layout/ActionScreen';
 import MethodSelector, { Method } from '@/src/features/app/components/MethodSelector';
 import CountryPicker, {
@@ -15,6 +15,7 @@ import { useFormValidation } from '@/src/hooks/useFormValidation';
 
 type Step = 'select_method' | 'select_country' | 'form';
 type DepositMethod = 'agent';
+type DepositPhase = 'entry' | 'success';
 
 const DEPOSIT_METHODS: Method[] = [
   {
@@ -34,7 +35,7 @@ export default function DepositScreen() {
   const [agentUserId, setAgentUserId] = useState('');
   const [amount, setAmount] = useState('');
   const [note, setNote] = useState('');
-  const [success, setSuccess] = useState(false);
+  const [phase, setPhase] = useState<DepositPhase>('entry');
 
   const formValues = useMemo(() => ({ agentUserId, amount }), [agentUserId, amount]);
   const { errors, validateField, touchField } = useFormValidation(
@@ -48,8 +49,16 @@ export default function DepositScreen() {
     formValues
   );
 
+  const extractErrorMessage = (error: unknown, fallback: string) => {
+    const data = (error as any)?.response?.data;
+    const message = data?.message ?? data?.error ?? (error as any)?.message;
+    return typeof message === 'string' && message.trim() ? message : fallback;
+  };
+
   function handleBack() {
-    if (step === 'form' && method === 'agent') {
+    if (step === 'form' && phase === 'success') {
+      router.back();
+    } else if (step === 'form' && method === 'agent') {
       setStep('select_country');
     } else if (step === 'select_country') {
       setStep('select_method');
@@ -62,11 +71,13 @@ export default function DepositScreen() {
 
   function handleMethodSelect(id: string) {
     setMethod(id as DepositMethod);
+    setPhase('entry');
     setStep('select_country');
   }
 
   function handleCountrySelect(c: Country) {
     setCountry(c);
+    setPhase('entry');
     setStep('form');
   }
 
@@ -97,10 +108,10 @@ export default function DepositScreen() {
       },
       {
         onSuccess: () => {
-          setSuccess(true);
+          setPhase('success');
         },
-        onError: () => {
-          notify.error('Agent deposit failed', 'Please confirm the agent ID and try again');
+        onError: (error) => {
+          notify.error('Agent deposit failed', extractErrorMessage(error, 'Please confirm the agent ID and try again'));
         },
       }
     );
@@ -116,7 +127,7 @@ export default function DepositScreen() {
         <CountryPicker onSelect={handleCountrySelect} selected={country?.code} />
       )}
 
-      {step === 'form' && method === 'agent' && country && (
+      {step === 'form' && method === 'agent' && country && phase === 'entry' && (
         <View className="gap-4">
           <View className="flex-row items-center gap-3 bg-[#2F6B2F]/5 rounded-xl p-3 mb-1">
             <Text style={{ fontSize: 24 }}>{country.flag}</Text>
@@ -159,13 +170,18 @@ export default function DepositScreen() {
             value={note}
             onChangeText={setNote}
           />
-          <Button onPress={handleAgentDeposit} disabled={deposit.isPending}>
-            {deposit.isPending ? 'Processing...' : 'Continue'}
-          </Button>
+          <TouchableOpacity
+            onPress={handleAgentDeposit}
+            disabled={deposit.isPending}
+            activeOpacity={0.85}
+            style={[styles.ctaButton, deposit.isPending && styles.ctaDisabled]}
+          >
+            <Text style={styles.ctaButtonLabel}>{deposit.isPending ? 'Processing...' : 'Continue'}</Text>
+          </TouchableOpacity>
         </View>
       )}
 
-      {success && (
+      {step === 'form' && phase === 'success' && (
         <View className="flex-1 items-center justify-center py-12 gap-4">
           <View className="w-20 h-20 rounded-full bg-green-100 items-center justify-center">
             <Ionicons name="checkmark" size={40} color="#16A34A" />
@@ -185,3 +201,23 @@ export default function DepositScreen() {
     </ActionScreen>
   );
 }
+
+const styles = StyleSheet.create({
+  ctaButton: {
+    minHeight: 48,
+    borderRadius: 12,
+    backgroundColor: '#2F6B2F',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+  },
+  ctaDisabled: {
+    opacity: 0.55,
+  },
+  ctaButtonLabel: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+});
